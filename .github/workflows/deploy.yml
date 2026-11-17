@@ -1,0 +1,107 @@
+name: Build data and deploy to GitHub Pages
+
+# Downloads Gaia data (cached between runs), builds the star files and, once
+# pipeline/build_octree.py exists, the octree tiles; then builds the viewer and
+# publishes it. Data never goes into git.
+#
+# Run it by hand from the Actions tab ("Run workflow") to choose other slices.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      slices:
+        description: "Gaia G-magnitude slices as min:max, separated by spaces"
+        required: false
+        default: "-5:10 10:11 11:12 12:12.5 12.5:13"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  SLICES: ${{ inputs.slices || '-5:10 10:11 11:12 12:12.5 12.5:13' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+      - run: python -m pip install -r pipeline/requirements.txt
+
+      - name: Restore downloaded Gaia slices
+        uses: actions/cache@v4
+        with:
+          path: pipeline/data/raw
+          key: gaia-raw-${{ hashFiles('pipeline/fetch_gaia.py') }}-${{ env.SLICES }}
+
+      - name: Download Gaia slices (skips slices already cached)
+        continue-on-error: true
+        working-directory: pipeline
+        env:
+          GAIA_USER: ${{ secrets.GAIA_USER }}
+          GAIA_PASSWORD: ${{ secrets.GAIA_PASSWORD }}
+        run: |
+          mkdir -p data/raw
+          for s in $SLICES; do
+            gmin="${s%%:*}"; gmax="${s##*:}"
+            if [ -f "data/raw/.done-$s" ]; then echo "cached: $s"; continue; fi
+            python fetch_gaia.py --gmin="$gmin" --gmax="$gmax" && touch "data/raw/.done-$s"
+          done
+
+      - name: Build star files and tiles
+        working-directory: pipeline
+        run: |
+          if ls data/raw/*.parquet >/dev/null 2>&1; then
+            python prepare.py data/raw/*.parquet --limit 1000000 --out ../viewer/public/data/stars-1m.bin
+            python prepare.py data/raw/*.parquet --limit 3000000 --out ../viewer/public/data/stars-3m.bin
+            python prepare.py data/raw/*.parquet --limit 6000000 --out ../viewer/public/data/stars-6m.bin
+            python prepare.py data/raw/*.parquet --limit 1000000
+            if [ -f build_octree.py ]; then
+              python build_octree.py data/raw/*.parquet --limit 6000000 --out ../viewer/public/tiles/stars
+            fi
+            {
+              echo "## Star files"
+              for f in ../viewer/public/data/stars-*.json; do echo "### $(basename "$f")"; echo '```json'; cat "$f"; echo '```'; done
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::No Gaia data was downloaded; deploying the bundled sample stars only."
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+      - run: npm ci
+        working-directory: viewer
+      - run: npm run build
+        working-directory: viewer
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: viewer/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

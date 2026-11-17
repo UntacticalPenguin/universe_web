@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "count": 146102,
+  "input_rows": 152074,
+  "dropped_rows": 5973,
+  "distance_source": {
+    "bailer_jones_photogeo": 0,
+    "bailer_jones_geo": 0,
+    "inverse_parallax": 146101
+  },
+  "absmag_range": [
+    -10.0,
+    20.0
+  ],
+  "colour_range": [
+    -0.5,
+    4.5
+  ],
+  "max_distance_pc": 19994.709935803745,
+  "inputs": [
+    "gaia_large.csv",
+    "gaia_new.csv",
+    "gaia.csv"
+  ]
+}

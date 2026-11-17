@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+pipeline/data/
+node_modules/
+viewer/dist/
+.DS_Store
+viewer/public/tiles/
+viewer/public/data/stars-*.bin
+viewer/public/data/stars-*.json
