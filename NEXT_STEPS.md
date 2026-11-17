@@ -56,17 +56,17 @@ The single star file does not scale. Steps 2 and 3 replace it with an octree of 
 | Source | Address | Used for | Access |
 | --- | --- | --- | --- |
 | ESA Gaia Archive (ADQL) | https://gea.esac.esa.int/archive/ | `gaiadr3.gaia_source` joined with `external.gaiaedr3_distance` | `fetch_gaia.py`, run by `deploy.yml` on GitHub Actions |
-| Gaia archive account | https://www.cosmos.esa.int/web/gaia-users/register | Removes the 3,000,000-row limit per download | **Human** registers, then adds the repository secrets `GAIA_USER` and `GAIA_PASSWORD` |
+| Gaia archive account | https://www.cosmos.esa.int/web/gaia-users/register | Required: anonymous queries are too limited for this data | **Human** registers, then adds the repository secrets `GAIA_USER` and `GAIA_PASSWORD` |
 | Bailer-Jones distances | https://bailer-jones.www3.mpia.de/gedr3_distances.html | Explains the distance columns | Already joined in the query |
 | ESA bulk files | https://cdn.gea.esac.esa.int/Gaia/gdr3/ | Later only (full catalog) | Not now |
 | LIneA HATS Parquet copy | https://data.linea.org.br/en/lsdb/gaia_dr3.html | Later only | Not now |
 
-Archive limits: without an account, at most 3,000,000 rows per download and a 90-minute timeout. With an account, no row limit, a 120-minute timeout and a 20 GB results quota. `fetch_gaia.py` warns when a result has exactly 3,000,000 rows, which means it was cut off.
+Archive limits since the archive's October 2026 release ([user quotas](https://www.cosmos.esa.int/web/gaia-users/archive/collaborate#GaiaArchiveUserQuotas)): without an account, asynchronous jobs stop after **1 minute** and **50,000 rows**, too little for these queries. With an account: a 120-minute timeout, no row limit and 20 GB of stored results. `deploy.yml` skips the download with a warning when the secrets are missing. The archive is closed from 25 November 2026, 12:00 CET, until the Gaia DR4 release on 2 December 2026.
 
 ## 4. Step 1: real data online and measured (Human)
 
 1. **Human**: Settings → Pages → Source: **GitHub Actions**.
-2. **Human**, optional: if a slice will exceed 3,000,000 rows, add your Gaia credentials as repository secrets `GAIA_USER` and `GAIA_PASSWORD` (Settings → Secrets and variables → Actions). Without them, the default slices stay below the cap or are flagged.
+2. **Human**, required: register a Gaia archive account (https://www.cosmos.esa.int/web/gaia-users/register) and add the repository secrets `GAIA_USER` and `GAIA_PASSWORD` (Settings → Secrets and variables → Actions). Without them no data can be downloaded.
 3. **Human**: Actions → "Build data and deploy to GitHub Pages" → Run workflow.
    - The first run downloads data and can take a while.
    - The run summary lists each star file's count and distance sources.

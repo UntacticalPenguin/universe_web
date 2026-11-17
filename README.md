@@ -86,7 +86,7 @@ So does the code organisation (see its AGENTS.md): one module per concern, facto
 1. Create a repository on github.com and put these files in it.
 2. On GitHub: Settings → Pages → Source: **GitHub Actions**.
 3. Every push to `main` now runs `.github/workflows/deploy.yml`. It downloads Gaia slices (cached between runs), builds `stars.bin` plus the 1 M / 3 M / 6 M test files (and octree tiles once `pipeline/build_octree.py` exists), builds `viewer/` and publishes it.
-4. Optional: add the repository secrets `GAIA_USER` and `GAIA_PASSWORD` (your ESA Gaia archive login) to lift the 3,000,000-row limit per download.
+4. Required for real data: add the repository secrets `GAIA_USER` and `GAIA_PASSWORD` (your ESA Gaia archive login). Since October 2026, anonymous archive queries stop after 1 minute and 50,000 rows.
 
 For GitHub Copilot's cloud agent, `.github/workflows/copilot-setup-steps.yml` prepares its environment and `AGENTS.md` tells it how to work here.
 

@@ -14,7 +14,10 @@ export const COLOUR_RANGE = [-0.5, 4.5] as const
 
 export async function loadStars(url: string): Promise<StarData> {
   const response = await fetch(url)
-  if (!response.ok) throw new Error(`could not load ${url} (http ${response.status}); run pipeline/prepare.py first`)
+  if (response.status === 404) {
+    throw new Error(`${url} is not on this site yet; the deploy workflow builds it once Gaia data has been downloaded (see the Actions log)`)
+  }
+  if (!response.ok) throw new Error(`could not load ${url} (http ${response.status})`)
   return parseStars(await response.arrayBuffer())
 }
 

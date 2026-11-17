@@ -56,11 +56,23 @@ jobs:
           GAIA_PASSWORD: ${{ secrets.GAIA_PASSWORD }}
         run: |
           mkdir -p data/raw
+          if [ -z "$GAIA_USER" ] || [ -z "$GAIA_PASSWORD" ]; then
+            echo "::warning title=No Gaia account::Add the repository secrets GAIA_USER and GAIA_PASSWORD (Settings → Secrets and variables → Actions). Anonymous Gaia archive jobs stop after 1 minute and 50,000 rows, so no data can be downloaded without them. Deploying the bundled sample stars only."
+            exit 0
+          fi
+          failed=""
           for s in $SLICES; do
             gmin="${s%%:*}"; gmax="${s##*:}"
             if [ -f "data/raw/.done-$s" ]; then echo "cached: $s"; continue; fi
-            python fetch_gaia.py --gmin="$gmin" --gmax="$gmax" && touch "data/raw/.done-$s"
+            if python fetch_gaia.py --gmin="$gmin" --gmax="$gmax"; then
+              touch "data/raw/.done-$s"
+            else
+              failed="$failed $s"
+            fi
           done
+          if [ -n "$failed" ]; then
+            echo "::warning title=Gaia slices failed::$failed. Check this step's log; the other slices were used."
+          fi
 
       - name: Build star files and tiles
         working-directory: pipeline

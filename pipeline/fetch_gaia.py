@@ -13,10 +13,14 @@ Actions secrets), the script logs in with them, without a prompt.
 
 Output: data/raw/gaia_G<gmin>-<gmax>.parquet
 
-Limits of the ESA archive: anonymous asynchronous jobs return at most 3,000,000 rows
-and time out after 90 minutes; logged-in jobs have no row limit, a 120-minute timeout
-and a 20 GB results quota. If a slice prints exactly 3,000,000 rows it was cut off:
-log in, or split it into half-magnitude slices.
+Limits of the ESA archive (since its October 2026 release, see
+https://www.cosmos.esa.int/web/gaia-users/archive/collaborate#GaiaArchiveUserQuotas):
+
+    anonymous:  asynchronous jobs time out after 1 minute and return at most 50,000 rows
+    logged in:  asynchronous jobs time out after 120 minutes, no row limit, 20 GB of results
+
+The join with the distance table takes far longer than a minute, so this script needs an
+account: register at https://www.cosmos.esa.int/web/gaia-users/register.
 
 Why magnitude slices: each slice is one archive job. Bright stars are few,
 faint stars are many, so going one magnitude at a time keeps every job a
@@ -47,7 +51,7 @@ JOIN external.gaiaedr3_distance AS d ON g.source_id = d.source_id
 WHERE g.phot_g_mean_mag >= {gmin} AND g.phot_g_mean_mag < {gmax}
 """
 
-ANONYMOUS_ROW_CAP = 3_000_000
+ANONYMOUS_ROW_CAP = 50_000
 
 
 def main() -> None:
@@ -68,6 +72,9 @@ def main() -> None:
     elif user and password:
         Gaia.login(user=user, password=password)
         logged_in = True
+    else:
+        print("WARNING: not logged in. Anonymous archive jobs stop after 1 minute and 50,000 rows, "
+              "which this query exceeds. Use --login, or set GAIA_USER and GAIA_PASSWORD.")
 
     Gaia.ROW_LIMIT = -1  # no client-side row cap
     if args.count:
@@ -75,7 +82,7 @@ def main() -> None:
         n = int(job.get_results()["n"][0])
         print(f"G {args.gmin:g} to {args.gmax:g}: {n:,} rows")
         if n > ANONYMOUS_ROW_CAP and not logged_in:
-            print("More than 3,000,000 rows: log in or split the slice.")
+            print("More than 50,000 rows: anonymous downloads would be cut off. Log in.")
         return
 
     query = QUERY.format(gmin=args.gmin, gmax=args.gmax)
@@ -84,8 +91,8 @@ def main() -> None:
     table = job.get_results()
     print(f"Received {len(table):,} rows")
     if len(table) == ANONYMOUS_ROW_CAP and not logged_in:
-        print("WARNING: exactly 3,000,000 rows, so the result was probably cut off. "
-              "Re-run with --login, or split this slice into smaller magnitude ranges.")
+        raise SystemExit("ERROR: exactly 50,000 rows, the anonymous limit, so the result was cut off. "
+                         "Log in (--login, or GAIA_USER and GAIA_PASSWORD) and run again.")
 
     args.out.mkdir(parents=True, exist_ok=True)
     gmin = "bright" if args.gmin <= -5 else f"{args.gmin:g}"
