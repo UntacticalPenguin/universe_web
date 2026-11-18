@@ -75,7 +75,7 @@ Two problems the Human sees on the deployed site, which Step 2 fixes:
 
 Archive limits since the archive's October 2026 release ([user quotas](https://www.cosmos.esa.int/web/gaia-users/archive/collaborate#GaiaArchiveUserQuotas)): without an account, asynchronous jobs stop after **1 minute** and **50,000 rows**. With an account: a 120-minute timeout, no row limit and 20 GB of stored results. The archive is closed from 25 November 2026, 12:00 CET, until the Gaia DR4 release on 2 December 2026; builds in that week use the release copy.
 
-GSP-Phot caveats: values exist only for stars GSP-Phot fitted (the run summary's `gspphot_coverage` says how many); A_G and E(BP−RP) are estimates along the line of sight from Earth and are known to be biased for some stars. Use them, but label the views that depend on them.
+GSP-Phot caveats: values exist only for stars GSP-Phot fitted: 57.6 % of `stars-1m.bin`, 59.1 % of `stars-3m.bin`, 62.0 % of `stars-6m.bin` (fewer among the brightest stars); A_G and E(BP−RP) are estimates along the line of sight from Earth and are known to be biased for some stars. Use them, but label the views that depend on them.
 
 ## 4. Step 1: real data online and measured (Human), done
 
@@ -84,7 +84,7 @@ Done on 17 November 2026: 7,311,530 stars with G < 13 downloaded; `stars-1m/3m/6
 Remaining for the **Human**:
 
 1. Fill in the machine table in `docs/measurements.md`: laptop model, GPU, browser, window size.
-2. After the next deploy run: the run summary shows `"version": 2` and a `gspphot_coverage` block for each star file, and the release `gaia-dr3-raw-v2` lists five `.parquet` files.
+2. Done on 18 November 2026: the files are version 2, and the release `gaia-dr3-raw-v2` holds all five slices (561 MB).
 
 **Gate 1**: passed.
 
@@ -134,7 +134,7 @@ Split this into two pull requests, in order. Both work on the current single-fil
   - **dust off**: from `teff_gspphot` if known, else from `bp_rp − E(BP−RP)` if known, else from `bp_rp`. Brightness uses M − A_G where A_G is known.
   - Upload the three version 2 byte arrays as attributes; for version 1 files they are all 255 and dust off changes nothing.
 - **Tray**:
-  - a toggle `dust on` / `dust off`. While off, the tray shows `no dust`, and how many loaded stars had no dust value, e.g. `no dust · 6 % unknown`;
+  - a toggle `dust on` / `dust off`. While off, the tray shows `no dust`, and how many loaded stars had no dust value, e.g. `no dust · 38 % unknown` (GSP-Phot fitted only about 60 % of the stars in the deployed files);
   - a knob `sat`, ×1.0 to ×3.0, default ×1.0, applied in the tone-mapping pass after step 2 as `Y + k · (rgb − Y)` with luminance Y kept, then clamped at 0. While above ×1.0 the tray shows `enhanced`;
   - a knob `glow`, 0 to 20 %, default 4 %;
   - a toggle `spikes`, off by default.

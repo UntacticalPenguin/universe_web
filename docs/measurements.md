@@ -54,3 +54,13 @@ frame for stars: (10 − 1.6) / 3.0 ≈ 2.8 million, so the octree's default bud
 | Build | fps | draw ms | Nodes drawn | Points drawn | GPU memory after 2 min | First stars after (s) |
 | --- | --- | --- | --- | --- | --- | --- |
 | 6 M | | | | | | |
+
+## Step 1: temperature and dust coverage (run 44212934122, 18 Nov 2026)
+
+Stars with GSP-Phot `teff_gspphot`, `ag_gspphot` and `ebpminrp_gspphot` (all three are present or absent together in these files):
+
+| File | Stars | With GSP-Phot values | Share | Size (MB, version 2) |
+| --- | --- | --- | --- | --- |
+| stars-1m.bin | 1,000,001 | 575,715 | 57.6 % | 17.0 |
+| stars-3m.bin | 3,000,001 | 1,774,045 | 59.1 % | 51.0 |
+| stars-6m.bin | 6,000,001 | 3,720,460 | 62.0 % | 102.0 |
