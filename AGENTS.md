@@ -16,7 +16,8 @@ Read `NEXT_STEPS.md` first: it holds the task list, the specs and the gates. Do 
 - **No GPU.** You cannot measure rendering performance; the Human measures on the deployed site. Do not invent measurements.
 - **The firewall blocks the ESA Gaia archive.** Do not try to download Gaia data. Use:
   - synthetic stars generated in tests;
-  - the bundled sample `viewer/public/data/stars.bin`.
+  - the bundled sample `viewer/public/data/stars.bin` (version 1, no temperature or dust values);
+  - small synthetic version 2 files written in tests.
 
   Real data is downloaded and built by `.github/workflows/deploy.yml` on every push to `main`.
 - **Sessions are limited to 59 minutes.** Keep each pull request to one sub-step.
@@ -43,5 +44,5 @@ cd viewer && npm run format   # Prettier, before finishing
 - **Pipeline**:
   - numpy and pandas, functions with docstrings;
   - reuse `prepare.py`'s helpers instead of copying them.
-- **Formats**: never break the `stars.bin` v1 format or its loader. New formats get new names and versions.
+- **Formats**: never break the `stars.bin` version 1 or 2 formats or their loader (the bundled sample is version 1; deployed files are version 2). New formats get new names and versions.
 - **Data**: never commit data files. `pipeline/data/`, `viewer/public/tiles/` and `viewer/public/data/stars-*.bin` are git-ignored.

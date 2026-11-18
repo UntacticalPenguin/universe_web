@@ -7,6 +7,7 @@ Usage (from the pipeline folder, with the virtual environment active):
     python fetch_gaia.py --gmax 10 --login      # log in to your ESA account first
 
     python fetch_gaia.py --gmin 11 --gmax 12 --count   # only print how many rows a slice has
+    python fetch_gaia.py --gmin 11 --gmax 12 --print-name   # only print the output file name
 
 If the environment variables GAIA_USER and GAIA_PASSWORD are set (for example as GitHub
 Actions secrets), the script logs in with them, without a prompt.
@@ -22,6 +23,10 @@ https://www.cosmos.esa.int/web/gaia-users/archive/collaborate#GaiaArchiveUserQuo
 The join with the distance table takes far longer than a minute, so this script needs an
 account: register at https://www.cosmos.esa.int/web/gaia-users/register.
 
+Columns: position (l, b), parallax, photometry (G, BP-RP), Gaia's GSP-Phot temperature and
+dust estimates (teff_gspphot, ag_gspphot, ebpminrp_gspphot; empty for stars GSP-Phot did not fit)
+and the Bailer-Jones distances.
+
 Why magnitude slices: each slice is one archive job. Bright stars are few,
 faint stars are many, so going one magnitude at a time keeps every job a
 manageable size. Start with --gmax 10 and only go fainter once the viewer works.
@@ -30,14 +35,13 @@ import argparse
 import os
 from pathlib import Path
 
-from astroquery.gaia import Gaia
-
 # Gaia DR3 and EDR3 share the same source_id values, so the Bailer-Jones
 # distance table (computed for EDR3) joins directly onto DR3.
 QUERY = """
 SELECT g.source_id, g.l, g.b,
        g.parallax, g.parallax_error, g.ruwe,
        g.phot_g_mean_mag, g.bp_rp,
+       g.teff_gspphot, g.ag_gspphot, g.ebpminrp_gspphot,
        d.r_med_geo, d.r_med_photogeo, d.r_lo_photogeo, d.r_hi_photogeo
 FROM gaiadr3.gaia_source AS g
 JOIN external.gaiaedr3_distance AS d ON g.source_id = d.source_id
@@ -54,6 +58,12 @@ WHERE g.phot_g_mean_mag >= {gmin} AND g.phot_g_mean_mag < {gmax}
 ANONYMOUS_ROW_CAP = 50_000
 
 
+def output_name(gmin: float, gmax: float) -> str:
+    """File name for a slice, e.g. gaia_Gbright-10.parquet or gaia_G12.5-13.parquet."""
+    low = "bright" if gmin <= -5 else f"{gmin:g}"
+    return f"gaia_G{low}-{gmax:g}.parquet"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Download a magnitude slice of Gaia DR3 with distances.")
     ap.add_argument("--gmin", type=float, default=-5.0, help="faint end is exclusive; bright end inclusive")
@@ -61,7 +71,14 @@ def main() -> None:
     ap.add_argument("--login", action="store_true", help="prompt for your ESA Gaia archive login first")
     ap.add_argument("--out", type=Path, default=Path("data/raw"))
     ap.add_argument("--count", action="store_true", help="only print the number of rows in this slice")
+    ap.add_argument("--print-name", action="store_true", help="only print the output file name, then exit")
     args = ap.parse_args()
+
+    if args.print_name:
+        print(output_name(args.gmin, args.gmax))
+        return
+
+    from astroquery.gaia import Gaia  # imported here: it prints archive status messages on import
 
     # Credentials from the environment (GitHub Actions secrets GAIA_USER / GAIA_PASSWORD) log in without a prompt.
     user, password = os.environ.get("GAIA_USER"), os.environ.get("GAIA_PASSWORD")
@@ -95,8 +112,7 @@ def main() -> None:
                          "Log in (--login, or GAIA_USER and GAIA_PASSWORD) and run again.")
 
     args.out.mkdir(parents=True, exist_ok=True)
-    gmin = "bright" if args.gmin <= -5 else f"{args.gmin:g}"
-    path = args.out / f"gaia_G{gmin}-{args.gmax:g}.parquet"
+    path = args.out / output_name(args.gmin, args.gmax)
     table.to_pandas().to_parquet(path, index=False)
     print(f"Saved {path} ({path.stat().st_size / 1e6:.1f} MB)")
 

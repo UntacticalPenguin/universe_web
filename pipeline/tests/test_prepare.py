@@ -49,3 +49,30 @@ def test_binary_layout(tmp_path):
     assert np.allclose(pos, xyz)
     assert raw[16 + n * 12 + 1] == 0 and raw[16 + n * 13 + 1] == 255
     assert len(raw) == 16 + n * 14
+
+
+def test_binary_layout_version_2(tmp_path):
+    xyz = np.array([[0, 0, 0], [1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    astro = {
+        "teff": np.array([5772.0, 50119.0, np.nan]),
+        "ag": np.array([0.0, 8.0, np.nan]),
+        "ebpminrp": np.array([0.0, 2.0, np.nan]),
+    }
+    path = tmp_path / "s2.bin"
+    prepare.write_bin(path, xyz, np.array([4.83, 0.0, 1.0]), np.array([0.82, 0.0, 1.0]), astro)
+    raw = path.read_bytes()
+    version, n, _ = struct.unpack("<III", raw[4:16])
+    assert raw[:4] == b"STR1" and (version, n) == (2, 3)
+    assert len(raw) == 16 + n * 17
+    base = 16 + n * 14
+    teff, ag, ebr = (np.frombuffer(raw[base + k * n: base + (k + 1) * n], dtype=np.uint8) for k in range(3))
+    # the Sun: log10(5772) = 3.7613 -> (3.7613 - 3.3) / 1.4 * 254 = 83.7 -> 84
+    assert teff[0] == 84 and teff[1] == 254 and teff[2] == 255
+    assert list(ag) == [0, 254, 255]
+    assert list(ebr) == [0, 127, 255]
+
+
+def test_astrophysics_only_with_all_columns():
+    full = pd.DataFrame({"teff_gspphot": [5000.0], "ag_gspphot": [0.1], "ebpminrp_gspphot": [0.05]})
+    assert prepare.astrophysics_of(full) is not None
+    assert prepare.astrophysics_of(full.drop(columns="ag_gspphot")) is None

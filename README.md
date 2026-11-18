@@ -1,6 +1,6 @@
-# Universe Map — starter (v0.4)
+# Universe Map — starter (v0.5)
 
-**Working on this repo? Start with [AGENTS.md](AGENTS.md) and [NEXT_STEPS.md](NEXT_STEPS.md).** Current focus: exploration only; the idle game is paused.
+**Working on this repo? Start with [AGENTS.md](AGENTS.md) and [NEXT_STEPS.md](NEXT_STEPS.md).** Current focus: exploration only; the idle game is paused. Next for the agent: Step 2a, light and colour.
 
 A minimal, working first version: Gaia stars → binary file → 3D viewer in the browser.
 Everything later (octree, streaming, galaxies, nebulae) grows out of these two folders.
@@ -91,7 +91,7 @@ So does the code organisation (see its AGENTS.md): one module per concern, facto
 For GitHub Copilot's cloud agent, `.github/workflows/copilot-setup-steps.yml` prepares its environment and `AGENTS.md` tells it how to work here.
 
 Limits to keep in mind: a single file in a GitHub repo can't exceed 100 MB, and a Pages site
-can't exceed 1 GB. `stars.bin` costs 14 bytes per star, so about 7 million stars per file.
+can't exceed 1 GB. `stars.bin` costs 14 bytes per star (version 1) or 17 (version 2, with temperature and dust), so about 6–7 million stars per file.
 Beyond that, the octree tiles move to Cloudflare R2.
 
 ## Files
@@ -117,10 +117,10 @@ Run `npm run format` (Prettier) before committing.
 ## Next milestones
 
 1. ✅ Binary star file + viewer
-2. ✅ Spaceship-style interface, draw-on-change, screen-space picking (this)
-3. Fetch more slices (G < 11, < 12, …) and watch where it gets slow
-4. Octree builder in `pipeline/` + tile streaming in `viewer/src/lod/`, with aggregated light per node
-5. Relative-to-centre rendering, logarithmic depth
-6. HDR render target + tone mapping, progressive refinement while the view is still
+2. ✅ Spaceship-style interface, draw-on-change, screen-space picking
+3. ✅ Real Gaia data (7.3 M stars, G < 13) with temperature and dust; draw time measured
+4. Light and colour: HDR, tone mapping, automatic exposure, dust switch, glow (NEXT_STEPS Step 2)
+5. Octree builder in `pipeline/` + tile streaming in `viewer/src/lod/`, with aggregated light per node (Steps 3–4)
+6. Exploration interactions and sound (Step 5)
 7. Labels and annotations
-8. Galaxies (2MRS first), then dust and nebulae
+8. Galaxies (2MRS first), then a 3D dust map and nebulae

@@ -11,6 +11,8 @@ What it does per star:
     2. convert (l, b, distance) to heliocentric galactic x, y, z in parsecs
     3. compute absolute magnitude M = m - 5 log10(d / 10 pc)
     4. quantise M and the colour index bp_rp to one byte each
+    5. if the input has Gaia's GSP-Phot columns (teff_gspphot, ag_gspphot, ebpminrp_gspphot),
+       also store temperature and dust per star and write version 2
 
 File layout of stars.bin (little-endian), version 1:
     bytes 0-3    magic "STR1"
@@ -20,6 +22,18 @@ File layout of stars.bin (little-endian), version 1:
     then         N x 3 float32  x, y, z in parsecs
     then         N x uint8      absolute magnitude, byte = (M - M_MIN) / (M_MAX - M_MIN) * 255
     then         N x uint8      colour, byte = (bp_rp - C_MIN) / (C_MAX - C_MIN) * 255
+
+Version 2 (same magic, version field 2) appends three more byte arrays after the colour:
+    then         N x uint8      temperature teff_gspphot, byte = (log10 T - 3.3) / 1.4 * 254   (1,995 K to 50,119 K)
+    then         N x uint8      dust extinction ag_gspphot in G, byte = A_G / 8 * 254               (0 to 8 mag)
+    then         N x uint8      dust reddening ebpminrp_gspphot, byte = E(BP-RP) / 4 * 254          (0 to 4 mag)
+    In all three, 255 means "no value": GSP-Phot did not fit that star.
+A version 2 file is 16 + 17 N bytes; version 1 is 16 + 14 N bytes.
+
+What the new values allow: colour from Gaia's own temperature fit (better than bp_rp for giants and
+reddened stars), and a "no dust" view: intrinsic colour bp_rp - E(BP-RP) and brightness M - A_G.
+Both GSP-Phot values are line-of-sight estimates from Earth with known biases (see the Gaia DR3
+documentation, section on astrophysical parameters); treat them as approximate.
 
 float32 positions are fine for this first version (stars within a few kpc).
 The octree version later switches to per-tile int16 offsets.
@@ -36,6 +50,13 @@ M_MIN, M_MAX = -10.0, 20.0     # absolute magnitude range stored
 C_MIN, C_MAX = -0.5, 4.5       # bp_rp range stored
 SUN_M, SUN_BPRP = 4.83, 0.82
 MAGIC, VERSION = b"STR1", 1
+VERSION_WITH_ASTROPHYSICS = 2
+TEFF_LOG_RANGE = (3.3, 4.7)    # log10 kelvin stored: 1,995 K to 50,119 K
+AG_RANGE = (0.0, 8.0)          # A_G (mag) stored
+EBR_RANGE = (0.0, 4.0)         # E(BP-RP) (mag) stored
+MISSING = 255                  # byte value for "no GSP-Phot value"
+SUN_TEFF = 5772.0
+GSPPHOT_COLUMNS = ("teff_gspphot", "ag_gspphot", "ebpminrp_gspphot")
 
 
 def load(paths: list[Path]) -> pd.DataFrame:
@@ -82,14 +103,42 @@ def quantise(values: np.ndarray, lo: float, hi: float) -> np.ndarray:
     return np.round(np.clip((values - lo) / (hi - lo), 0.0, 1.0) * 255).astype(np.uint8)
 
 
-def write_bin(path: Path, xyz: np.ndarray, absmag: np.ndarray, colour: np.ndarray) -> None:
+def quantise_optional(values: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    """Like quantise, but onto 0-254 and with NaN stored as MISSING (255)."""
+    out = np.full(len(values), MISSING, dtype=np.uint8)
+    ok = np.isfinite(values)
+    out[ok] = np.round(np.clip((values[ok] - lo) / (hi - lo), 0.0, 1.0) * 254).astype(np.uint8)
+    return out
+
+
+def write_bin(path: Path, xyz: np.ndarray, absmag: np.ndarray, colour: np.ndarray,
+              astrophysics: dict[str, np.ndarray] | None = None) -> None:
+    """Write version 1, or version 2 when `astrophysics` holds teff (K), ag and ebpminrp (mag), NaN where unknown."""
     n = len(xyz)
     path.parent.mkdir(parents=True, exist_ok=True)
+    version = VERSION if astrophysics is None else VERSION_WITH_ASTROPHYSICS
     with open(path, "wb") as f:
-        f.write(MAGIC + struct.pack("<III", VERSION, n, 0))
+        f.write(MAGIC + struct.pack("<III", version, n, 0))
         f.write(xyz.astype("<f4").tobytes())
         f.write(quantise(absmag, M_MIN, M_MAX).tobytes())
         f.write(quantise(colour, C_MIN, C_MAX).tobytes())
+        if astrophysics is not None:
+            teff = astrophysics["teff"]
+            log_teff = np.where(teff > 0, np.log10(np.where(teff > 0, teff, 1.0)), np.nan)
+            f.write(quantise_optional(log_teff, *TEFF_LOG_RANGE).tobytes())
+            f.write(quantise_optional(astrophysics["ag"], *AG_RANGE).tobytes())
+            f.write(quantise_optional(astrophysics["ebpminrp"], *EBR_RANGE).tobytes())
+
+
+def astrophysics_of(df: pd.DataFrame) -> dict[str, np.ndarray] | None:
+    """GSP-Phot temperature and dust per row (NaN where missing), or None when the input lacks the columns."""
+    if not all(c in df.columns for c in GSPPHOT_COLUMNS):
+        return None
+    return {
+        "teff": df["teff_gspphot"].to_numpy(float),
+        "ag": df["ag_gspphot"].to_numpy(float),
+        "ebpminrp": df["ebpminrp_gspphot"].to_numpy(float),
+    }
 
 
 def main() -> None:
@@ -115,15 +164,20 @@ def main() -> None:
     colour = df["bp_rp"].to_numpy(float) if "bp_rp" in df else np.full(len(df), SUN_BPRP)
     colour = np.where(np.isfinite(colour), colour, SUN_BPRP)  # missing colour: draw as Sun-coloured
 
+    astrophysics = astrophysics_of(df)
+
     # The Sun itself, at the origin.
     xyz = np.vstack([[0.0, 0.0, 0.0], xyz])
     absmag = np.concatenate([[SUN_M], absmag])
     colour = np.concatenate([[SUN_BPRP], colour])
+    if astrophysics is not None:
+        sun = {"teff": SUN_TEFF, "ag": 0.0, "ebpminrp": 0.0}
+        astrophysics = {k: np.concatenate([[sun[k]], v]) for k, v in astrophysics.items()}
 
-    write_bin(args.out, xyz, absmag, colour)
+    write_bin(args.out, xyz, absmag, colour, astrophysics)
 
     meta = {
-        "version": VERSION,
+        "version": VERSION if astrophysics is None else VERSION_WITH_ASTROPHYSICS,
         "count": int(len(xyz)),
         "input_rows": int(n_in),
         "dropped_rows": int(n_in - keep.sum()),
@@ -131,6 +185,9 @@ def main() -> None:
             "bailer_jones_photogeo": int((src == 1).sum()),
             "bailer_jones_geo": int((src == 2).sum()),
             "inverse_parallax": int((src == 3).sum()),
+        },
+        "gspphot_coverage": None if astrophysics is None else {
+            k: int(np.isfinite(v).sum()) for k, v in astrophysics.items()
         },
         "absmag_range": [M_MIN, M_MAX],
         "colour_range": [C_MIN, C_MAX],

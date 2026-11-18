@@ -1,8 +1,13 @@
 name: Build data and deploy to GitHub Pages
 
-# Downloads Gaia data (cached between runs), builds the star files and, once
-# pipeline/build_octree.py exists, the octree tiles; then builds the viewer and
-# publishes it. Data never goes into git.
+# Downloads Gaia data, builds the star files and, once pipeline/build_octree.py
+# exists, the octree tiles; then builds the viewer and publishes it. Data never
+# goes into git.
+#
+# Each downloaded slice is also stored as an asset of the GitHub release named in
+# RAW_RELEASE, so it survives cache expiry and Gaia archive downtime. Where a slice
+# comes from, in order: the Actions cache, that release, the Gaia archive.
+# Change RAW_RELEASE whenever fetch_gaia.py's columns change.
 #
 # Run it by hand from the Actions tab ("Run workflow") to choose other slices.
 
@@ -17,7 +22,7 @@ on:
         default: "-5:10 10:11 11:12 12:12.5 12.5:13"
 
 permissions:
-  contents: read
+  contents: write # store raw Gaia slices as release assets
   pages: write
   id-token: write
 
@@ -27,6 +32,7 @@ concurrency:
 
 env:
   SLICES: ${{ inputs.slices || '-5:10 10:11 11:12 12:12.5 12.5:13' }}
+  RAW_RELEASE: gaia-dr3-raw-v2
 
 jobs:
   build:
@@ -46,32 +52,47 @@ jobs:
         uses: actions/cache@v4
         with:
           path: pipeline/data/raw
-          key: gaia-raw-${{ hashFiles('pipeline/fetch_gaia.py') }}-${{ env.SLICES }}
+          key: gaia-raw-${{ env.RAW_RELEASE }}-${{ env.SLICES }}
 
-      - name: Download Gaia slices (skips slices already cached)
+      - name: Get Gaia slices (cache, then release, then archive)
         continue-on-error: true
         working-directory: pipeline
         env:
           GAIA_USER: ${{ secrets.GAIA_USER }}
           GAIA_PASSWORD: ${{ secrets.GAIA_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           mkdir -p data/raw
-          if [ -z "$GAIA_USER" ] || [ -z "$GAIA_PASSWORD" ]; then
-            echo "::warning title=No Gaia account::Add the repository secrets GAIA_USER and GAIA_PASSWORD (Settings → Secrets and variables → Actions). Anonymous Gaia archive jobs stop after 1 minute and 50,000 rows, so no data can be downloaded without them. Deploying the bundled sample stars only."
-            exit 0
-          fi
+          account=yes
+          if [ -z "$GAIA_USER" ] || [ -z "$GAIA_PASSWORD" ]; then account=no; fi
+          release=yes
+          gh release view "$RAW_RELEASE" >/dev/null 2>&1 || release=no
           failed=""
           for s in $SLICES; do
             gmin="${s%%:*}"; gmax="${s##*:}"
-            if [ -f "data/raw/.done-$s" ]; then echo "cached: $s"; continue; fi
+            name="$(python fetch_gaia.py --gmin="$gmin" --gmax="$gmax" --print-name)"
+            if [ -f "data/raw/$name" ]; then echo "cache: $name"; continue; fi
+            if [ "$release" = yes ] && gh release download "$RAW_RELEASE" --pattern "$name" --dir data/raw 2>/dev/null; then
+              echo "release: $name"; continue
+            fi
+            if [ "$account" = no ]; then failed="$failed $s"; continue; fi
             if python fetch_gaia.py --gmin="$gmin" --gmax="$gmax"; then
-              touch "data/raw/.done-$s"
+              if [ "$release" = no ]; then
+                gh release create "$RAW_RELEASE" --title "Raw Gaia DR3 slices ($RAW_RELEASE)" --latest=false \
+                  --notes "Parquet slices written by pipeline/fetch_gaia.py, stored by deploy.yml. Not a software release." && release=yes
+              fi
+              gh release upload "$RAW_RELEASE" "data/raw/$name" --clobber || echo "::warning::could not store $name in release $RAW_RELEASE"
             else
               failed="$failed $s"
             fi
           done
           if [ -n "$failed" ]; then
-            echo "::warning title=Gaia slices failed::$failed. Check this step's log; the other slices were used."
+            if [ "$account" = no ]; then
+              echo "::warning title=No Gaia account::Slices$failed are neither cached nor in release $RAW_RELEASE. Add the repository secrets GAIA_USER and GAIA_PASSWORD (Settings → Secrets and variables → Actions); anonymous archive jobs stop after 1 minute and 50,000 rows."
+            else
+              echo "::warning title=Gaia slices failed::$failed. Check this step's log; the other slices were used."
+            fi
           fi
 
       - name: Build star files and tiles
