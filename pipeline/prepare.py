@@ -141,22 +141,22 @@ def astrophysics_of(df: pd.DataFrame) -> dict[str, np.ndarray] | None:
     }
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Convert Gaia rows to the viewer's binary star file.")
-    ap.add_argument("inputs", nargs="+", type=Path)
-    ap.add_argument("--out", type=Path, default=Path("../viewer/public/data/stars.bin"))
-    ap.add_argument("--min-snr", type=float, default=5.0, help="minimum parallax/error when falling back to 1/parallax")
-    ap.add_argument("--max-dist", type=float, default=20000.0, help="drop stars farther than this (pc)")
-    ap.add_argument("--limit", type=int, default=0, help="keep only the N brightest stars (apparent G); 0 keeps all")
-    args = ap.parse_args()
+def temperature_of(bp_rp):
+    """Colour-derived dwarf temperature, matching the viewer's temperatureOf."""
+    theta = 0.4929 + 0.5092 * bp_rp - 0.0353 * bp_rp**2
+    return np.clip(5040 / theta, 2000, 40000)
 
-    df = load(args.inputs)
+
+def prepare_catalog(inputs, limit=0, min_snr=5.0, max_dist=20000.0):
+    """Prepare the same physical catalog, including the Sun, for both output formats."""
+    df = load(inputs)
     n_in = len(df)
-    dist, src = choose_distance(df, args.min_snr)
-    keep = np.isfinite(dist) & (dist <= args.max_dist) & np.isfinite(df["phot_g_mean_mag"].to_numpy(float))
+    dist, src = choose_distance(df, min_snr)
+    keep = np.isfinite(dist) & (dist <= max_dist) & np.isfinite(df["phot_g_mean_mag"].to_numpy(float))
+    keep &= np.isfinite(df["l"]) & np.isfinite(df["b"])
     df, dist, src = df[keep].reset_index(drop=True), dist[keep], src[keep]
-    if args.limit and len(df) > args.limit:
-        brightest = np.sort(np.argsort(df["phot_g_mean_mag"].to_numpy(float), kind="stable")[: args.limit])
+    if limit and len(df) > limit:
+        brightest = np.sort(np.argsort(df["phot_g_mean_mag"].to_numpy(float), kind="stable")[: limit])
         df, dist, src = df.iloc[brightest].reset_index(drop=True), dist[brightest], src[brightest]
 
     xyz = galactic_to_xyz(df["l"].to_numpy(float), df["b"].to_numpy(float), dist)
@@ -174,13 +174,26 @@ def main() -> None:
         sun = {"teff": SUN_TEFF, "ag": 0.0, "ebpminrp": 0.0}
         astrophysics = {k: np.concatenate([[sun[k]], v]) for k, v in astrophysics.items()}
 
+    return xyz, absmag, colour, astrophysics, n_in, int(n_in - keep.sum()), src
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Convert Gaia rows to the viewer's binary star file.")
+    ap.add_argument("inputs", nargs="+", type=Path)
+    ap.add_argument("--out", type=Path, default=Path("../viewer/public/data/stars.bin"))
+    ap.add_argument("--min-snr", type=float, default=5.0, help="minimum parallax/error when falling back to 1/parallax")
+    ap.add_argument("--max-dist", type=float, default=20000.0, help="drop stars farther than this (pc)")
+    ap.add_argument("--limit", type=int, default=0, help="keep only the N brightest stars (apparent G); 0 keeps all")
+    args = ap.parse_args()
+
+    xyz, absmag, colour, astrophysics, n_in, dropped, src = prepare_catalog(args.inputs, args.limit, args.min_snr, args.max_dist)
     write_bin(args.out, xyz, absmag, colour, astrophysics)
 
     meta = {
         "version": VERSION if astrophysics is None else VERSION_WITH_ASTROPHYSICS,
         "count": int(len(xyz)),
         "input_rows": int(n_in),
-        "dropped_rows": int(n_in - keep.sum()),
+        "dropped_rows": dropped,
         "distance_source": {
             "bailer_jones_photogeo": int((src == 1).sum()),
             "bailer_jones_geo": int((src == 2).sum()),

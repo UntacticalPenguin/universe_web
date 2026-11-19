@@ -188,29 +188,6 @@
           }
         }
       }
-      .knob {
-        --fill: 0;
-        width: var(--knob);
-        height: var(--knob);
-        margin-right: 0.75ch;
-        padding: 0;
-        vertical-align: -2px;
-        border: var(--hair) solid var(--ink-2);
-        border-radius: 50%;
-        background: conic-gradient(var(--ink-2) calc(var(--fill) * 1turn), transparent 0);
-        cursor: ns-resize;
-        touch-action: none;
-        transition: border-color var(--fast);
-        &:hover,
-        &:focus-visible {
-          border-color: var(--ink);
-          outline: none;
-        }
-        &[data-dragging] {
-          border-color: var(--hot);
-          background: conic-gradient(var(--hot) calc(var(--fill) * 1turn), transparent 0);
-        }
-      }
       /* Polybar-style readings in one centred row, a hairline between every field. */
       #tray {
         position: fixed;
@@ -285,19 +262,141 @@
       }
       #dust,
       #spikes,
-      #exposure-mode,
-      #home {
-        padding: 0 var(--gap);
-        border: none;
-        border-left: var(--hair) solid var(--ink-5);
-        background: none;
-        color: var(--ink-2);
+      #controls {
+        position: fixed;
+        z-index: 11;
+        right: 12px;
+        top: 12px;
+        width: min(264px, calc(100vw - 24px));
+        background: var(--bg);
+        border: 1px solid var(--ink-4);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      #controls header {
+        display: grid;
+        grid-template-columns: 1fr 90px;
+      }
+      #controls button,
+      #controls select {
         font: inherit;
+        color: var(--ink-2);
+        background: var(--bg);
+        border: 1px solid var(--ink-4);
         cursor: pointer;
-        &:hover,
-        &:focus-visible {
-          color: var(--ink);
-          outline: none;
+        min-height: 34px;
+      }
+      #controls button:hover,
+      #controls select:hover,
+      #controls :focus-visible {
+        color: var(--ink);
+        border-color: var(--ink);
+        outline: 1px solid var(--ink-2);
+      }
+      #controls button[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--bg);
+      }
+      #controls button:active {
+        color: var(--hot);
+      }
+      #controls header button {
+        border: 0;
+        text-align: left;
+        padding: 0 12px;
+      }
+      #controls #home {
+        border-left: 1px solid var(--ink-4);
+        text-align: center;
+      }
+      #drawer-toggle::before {
+        content: "▸";
+        display: inline-block;
+        width: 2ch;
+      }
+      #drawer-toggle[aria-expanded="true"]::before {
+        content: "▾";
+      }
+      #controls-body {
+        max-height: calc(100dvh - 80px);
+        overflow-y: auto;
+        border-top: 1px solid var(--ink-4);
+        padding: 0 12px 8px;
+        scrollbar-gutter: stable;
+      }
+      #controls h2 {
+        font: inherit;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin: 12px 0 5px;
+      }
+      #controls label,
+      .switch-row {
+        display: grid;
+        grid-template-columns: 1fr 92px;
+        align-items: center;
+        min-height: 38px;
+        border-top: 1px solid var(--ink-5);
+      }
+      #controls select {
+        padding-inline: 8px;
+        width: 100%;
+      }
+      #controls .mode-note {
+        height: 16px;
+        margin: 0;
+        font-size: 10px;
+        color: var(--ink-2);
+      }
+      #controls .mode-note[hidden] {
+        display: block;
+        visibility: hidden;
+      }
+      .orbit-pad {
+        display: grid;
+        grid-template-columns: 40px 96px 40px;
+        grid-template-rows: 32px 96px 32px;
+        justify-content: center;
+        align-items: center;
+      }
+      #orbit-globe {
+        grid-area: 2/2;
+        width: 96px;
+        height: 96px;
+        cursor: grab;
+        touch-action: none;
+        fill: none;
+        stroke: var(--ink-4);
+      }
+      #orbit-globe:active {
+        cursor: grabbing;
+        stroke: var(--hot);
+      }
+      #orbit-globe circle {
+        stroke: var(--ink-2);
+      }
+      .orbit-pad button {
+        justify-self: center;
+        width: 36px;
+      }
+      #controls .hint {
+        color: var(--ink-2);
+        font-size: 10px;
+        line-height: 1.5;
+        margin: 4px 0 8px;
+      }
+      #error:not(:empty) {
+        z-index: 12;
+        background: var(--bg);
+      }
+      @media (max-width: 640px) {
+        #controls {
+          right: 5px;
+          top: 5px;
+        }
+        #rail {
+          max-width: 30vw;
         }
       }
       #error {
@@ -316,6 +415,46 @@
     <svg id="rail" aria-label="distance scale: drag to set the camera's distance from its target"></svg>
     <div id="target" aria-hidden="true"><span></span></div>
     <div id="cursor" aria-hidden="true" hidden></div>
+    <aside id="controls" aria-label="Viewer controls">
+      <header>
+        <button id="drawer-toggle" aria-expanded="true" aria-controls="controls-body">Controls</button
+        ><button id="home" aria-pressed="false" title="Return to the Sun. Toggle again to restore your view.">☉ Sun</button>
+      </header>
+      <div id="controls-body">
+        <h2>Orbit</h2>
+        <div class="orbit-pad">
+          <svg id="orbit-globe" viewBox="0 0 100 100" role="group" tabindex="0" aria-label="Orbit globe. Drag or use the arrow keys to rotate around the focus">
+            <circle cx="50" cy="50" r="40" />
+            <path />
+            <circle cx="50" cy="50" r="1.5" />
+          </svg>
+          <button data-orbit="0,1" style="grid-area: 1/2" aria-pressed="false" aria-label="Orbit up" title="Toggle orbit up">↑</button>
+          <button data-orbit="-1,0" style="grid-area: 2/1" aria-pressed="false" aria-label="Orbit left" title="Toggle orbit left">←</button>
+          <button data-orbit="1,0" style="grid-area: 2/3" aria-pressed="false" aria-label="Orbit right" title="Toggle orbit right">→</button>
+          <button data-orbit="0,-1" style="grid-area: 3/2" aria-pressed="false" aria-label="Orbit down" title="Toggle orbit down">↓</button>
+        </div>
+        <p class="hint">Click a star to focus. Drag the globe, or toggle an arrow for continuous orbit.</p>
+        <label
+          >Rotation speed<select id="rotation-speed">
+            <option value=".25">¼×</option>
+            <option value=".5">½×</option>
+            <option selected value="1">1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select></label
+        >
+        <h2>Starlight</h2>
+        <label>Magnitude limit<select id="mag-value"></select></label>
+        <label>Exposure offset<select id="exposure-value"></select></label>
+        <label>Saturation<select id="sat-value"></select></label>
+        <p class="mode-note" id="enhanced" hidden>enhanced</p>
+        <label>Glow<select id="glow-value"></select></label>
+        <div class="switch-row"><span>Metering</span><button id="exposure-mode" aria-label="Metering" aria-pressed="true">auto</button></div>
+        <div class="switch-row"><span>Galactic dust</span><button id="dust" aria-label="Galactic dust" aria-pressed="true">dust on</button></div>
+        <p class="mode-note" id="dust-status" hidden></p>
+        <div class="switch-row"><span>Diffraction</span><button id="spikes" aria-label="Diffraction" aria-pressed="false">spikes off</button></div>
+      </div>
+    </aside>
     <footer id="tray">
       <span class="zone"><span class="brand">universe map</span></span>
       <span class="zone">
@@ -327,38 +466,9 @@
         <span data-field="visible"><abbr title="stars bright enough to draw from here; counted once the view is still">◐</abbr><b>—</b></span>
       </span>
       <span class="zone">
-        <span data-field="mag"
-          ><button id="mag-knob" class="knob" type="button" aria-label="magnitude limit"></button
-          ><abbr title="draw stars brighter than this magnitude, or all stars">mag</abbr><b id="mag-value"></b
-        ></span>
-        <span data-field="exposure"
-          ><button id="exposure-knob" class="knob" type="button" aria-label="exposure in stops"></button><abbr title="exposure offset in stops">exp</abbr
-          ><b id="exposure-value"></b
-        ></span>
-      </span>
-      <span class="zone">
-        <button id="exposure-mode" type="button" aria-label="Automatic exposure" aria-pressed="true">auto</button>
-      </span>
-      <span class="zone">
-        <button id="dust" type="button" aria-label="Dust as seen from Earth" aria-pressed="true" title="Include dust along the line of sight from Earth">
-          dust on
-        </button>
-        <span id="dust-status" data-field="dust-status" hidden></span>
-        <span data-field="sat"
-          ><button id="sat-knob" class="knob" type="button" aria-label="Color saturation"></button><abbr title="Color saturation">sat</abbr
-          ><b id="sat-value"></b
-        ></span>
-        <span id="enhanced" data-field="enhanced" hidden>enhanced</span>
-        <span data-field="glow"
-          ><button id="glow-knob" class="knob" type="button" aria-label="Halo strength"></button><abbr title="Halo strength">glow</abbr><b id="glow-value"></b
-        ></span>
-        <button id="spikes" type="button" aria-label="Diffraction spikes" aria-pressed="false">spikes off</button>
-      </span>
-      <span class="zone">
         <span data-field="fps"><abbr title="frames drawn in the last second; idle while nothing changes">fps</abbr><b>—</b></span>
         <span data-field="draw" hidden><abbr title="median time to draw one frame, GPU included (benchmark mode)">draw ms</abbr><b>—</b></span>
       </span>
-      <button id="home" type="button">⌂ sun</button>
     </footer>
     <output id="error"></output>
     <script type="module" src="/src/main.ts"></script>
