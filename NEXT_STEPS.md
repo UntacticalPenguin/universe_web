@@ -7,7 +7,7 @@ Brief for a coding agent (GitHub Copilot cloud agent or any other) working in th
 - Stop at each gate and report.
 - A human (the project owner, "Human") does everything marked **Human**: settings, secrets and all performance measurements.
 
-**Next for the agent: Step 2a** (section 6).
+**Current checkpoint: Gate 2 (Human).** Steps 2a and 2b are implemented. Check the deployed viewer against the visual and timing criteria in section 6 before starting Step 3.
 
 ## 1. Context
 

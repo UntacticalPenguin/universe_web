@@ -3,7 +3,8 @@ export const profileArea = (Math.PI * (1 - Math.exp(-4))) / 16
 
 export const fluxOf = (magnitude: number) => 10 ** (-0.4 * (magnitude - 6))
 
-export const pointSizeOf = (magnitude: number, exposure: number) => Math.min(16, 1.5 + 2.5 * Math.log10(1 + fluxOf(magnitude) * exposure))
+export const pointSizeOf = (magnitude: number, exposure: number, spikes = false) =>
+  Math.min(spikes ? 48 : 16, 1.5 + 2.5 * Math.log10(1 + fluxOf(magnitude) * exposure))
 
 export const profileOf = (radius: number, diameter: number) => (radius > 1 ? 0 : Math.exp(-4 * radius ** 2) / (profileArea * diameter ** 2))
 
