@@ -216,7 +216,8 @@
         position: fixed;
         inset: auto 0 0;
         display: flex;
-        justify-content: center;
+        justify-content: safe center;
+        overflow-x: auto;
         align-items: center;
         height: var(--tray-height);
         border-top: var(--hair) solid var(--ink-5);
@@ -282,6 +283,8 @@
           color: var(--ink-2);
         }
       }
+      #dust,
+      #spikes,
       #exposure-mode,
       #home {
         padding: 0 var(--gap);
@@ -335,6 +338,23 @@
       </span>
       <span class="zone">
         <button id="exposure-mode" type="button" aria-label="Automatic exposure" aria-pressed="true">auto</button>
+      </span>
+      <span class="zone">
+        <button id="dust" type="button" aria-label="Dust as seen from Earth" aria-pressed="true" title="Include dust along the line of sight from Earth">
+          dust on
+        </button>
+        <span id="dust-status" data-field="dust-status" hidden></span>
+        <span data-field="sat"
+          ><button id="sat-knob" class="knob" type="button" aria-label="Color saturation"></button><abbr title="Color saturation">sat</abbr
+          ><b id="sat-value"></b
+        ></span>
+        <span id="enhanced" data-field="enhanced" hidden>enhanced</span>
+        <span data-field="glow"
+          ><button id="glow-knob" class="knob" type="button" aria-label="Halo strength"></button><abbr title="Halo strength">glow</abbr><b id="glow-value"></b
+        ></span>
+        <button id="spikes" type="button" aria-label="Diffraction spikes" aria-pressed="false">spikes off</button>
+      </span>
+      <span class="zone">
         <span data-field="fps"><abbr title="frames drawn in the last second; idle while nothing changes">fps</abbr><b>—</b></span>
         <span data-field="draw" hidden><abbr title="median time to draw one frame, GPU included (benchmark mode)">draw ms</abbr><b>—</b></span>
       </span>

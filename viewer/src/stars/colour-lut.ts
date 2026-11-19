@@ -1,12 +1,12 @@
 import * as THREE from "three"
-import { COLOUR_RANGE } from "./load-stars.ts"
+import { colourIndexOf, gspTemperatureOf, reddeningOf, type StarData } from "./load-stars.ts"
 
-/** 256 star colours, indexed by the quantised bp_rp byte: bp_rp, then temperature, then blackbody spectrum, then CIE XYZ, then linear sRGB. */
+/** Linear sRGB blackbody colours spaced uniformly in log temperature. */
 export function createColourLut() {
   const texels = new Uint8Array(256 * 4)
   for (let i = 0; i < 256; i++) {
-    const bpRp = COLOUR_RANGE[0] + (i / 255) * (COLOUR_RANGE[1] - COLOUR_RANGE[0])
-    const [r, g, b] = blackbodyRgb(temperatureOf(bpRp))
+    const kelvin = 2000 * 25 ** (i / 255)
+    const [r, g, b] = blackbodyRgb(kelvin)
     texels.set([r * 255, g * 255, b * 255, 255], i * 4)
   }
   const texture = new THREE.DataTexture(texels, 256, 1, THREE.RGBAFormat)
@@ -21,6 +21,13 @@ export function createColourLut() {
 export function temperatureOf(bpRp: number) {
   const theta = 0.4929 + 0.5092 * bpRp - 0.0353 * bpRp * bpRp
   return Math.min(40_000, Math.max(2_000, 5040 / theta))
+}
+
+export function displayTemperature(data: StarData, index: number, dust: boolean) {
+  const measured = dust ? undefined : gspTemperatureOf(data, index)
+  if (measured !== undefined) return { kelvin: measured, source: "GSP-Phot" }
+  const correction = dust ? 0 : (reddeningOf(data, index) ?? 0)
+  return { kelvin: temperatureOf(colourIndexOf(data, index) - correction), source: "from colour" }
 }
 
 export function spectralClassOf(kelvin: number) {

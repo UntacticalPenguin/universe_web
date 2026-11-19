@@ -8,11 +8,12 @@ import { createPointer } from "./hud/pointer.ts"
 import { countPerDecade, createScaleRail } from "./hud/scale-rail.ts"
 import { createTargetMark } from "./hud/target-mark.ts"
 import { createTray } from "./hud/tray.ts"
-import { spectralClassOf, temperatureOf } from "./stars/colour-lut.ts"
-import { absoluteMagnitudeOf, colourIndexOf, loadStars, type StarData } from "./stars/load-stars.ts"
+import { spectralClassOf, displayTemperature } from "./stars/colour-lut.ts"
+import { absoluteMagnitudeOf, extinctionOf, reddeningOf, MISSING, loadStars, type StarData } from "./stars/load-stars.ts"
 import { createScreenIndex, type StarHit } from "./stars/screen-index.ts"
 import { createStarsLayer } from "./stars/stars-layer.ts"
 import { createHdrTarget } from "./render/hdr-target.ts"
+import { createGlow } from "./render/glow.ts"
 import { createToneMap } from "./render/tone-map.ts"
 import { createLuminanceMeter } from "./render/auto-exposure.ts"
 import { targetExposure, updateExposure } from "./render/light.ts"
@@ -55,7 +56,11 @@ async function main() {
 
   const canvas = renderer.domElement
   const hdr = createHdrTarget(canvas.width, canvas.height)
-  const toneMap = createToneMap(hdr.texture)
+  hdr.texture.minFilter = hdr.texture.magFilter = THREE.LinearFilter
+  const bloom = createGlow(hdr)
+  const toneMap = createToneMap(hdr.texture, bloom.textures)
+  let dust = true
+  let spikes = false
   const measureMean = createLuminanceMeter(hdr)
   let automatic = true
   let baseExposure = 1
@@ -82,12 +87,20 @@ async function main() {
 
   const allPosition = 20.1
   const cutoff = (m: number) => (m >= allPosition ? Infinity : m)
-  const screenIndex = createScreenIndex({ data, camera, viewport, magLimit: () => cutoff(magKnob.value()), exposure: () => drawnExposure })
+  const screenIndex = createScreenIndex({
+    data,
+    camera,
+    viewport,
+    magLimit: () => cutoff(magKnob.value()),
+    exposure: () => drawnExposure,
+    dust: () => dust,
+    spikes: () => spikes,
+  })
   const pointer = createPointer({
     layer: $("#cursor"),
     surface: renderer.domElement,
     pick: (x, y, range) => screenIndex.nearest(x, y, range),
-    describe: (hit) => describeStar(data, hit),
+    describe: (hit) => describeStar(data, hit, dust),
     onSelect: (hit) => {
       targetIndex = hit.index
       flight.to(positionOf(data, hit.index))
@@ -116,6 +129,49 @@ async function main() {
     onInput: invalidate,
   })
 
+  const sat = createKnob({
+    element: $<HTMLButtonElement>("#sat-knob"),
+    output: $("#sat-value"),
+    min: 1,
+    max: 3,
+    step: 0.1,
+    value: 1,
+    format: (value) => `×${value.toFixed(1)}`,
+    onInput: (value) => {
+      $("#enhanced").hidden = value <= 1
+      invalidate()
+    },
+  })
+  const glow = createKnob({
+    element: $<HTMLButtonElement>("#glow-knob"),
+    output: $("#glow-value"),
+    min: 0,
+    max: 20,
+    step: 1,
+    value: 4,
+    format: (value) => `${value}%`,
+    onInput: invalidate,
+  })
+  let missingDust = 0
+  for (let i = 0; i < data.count; i++) if (data.extinction[i] === MISSING && data.reddening[i] === MISSING) missingDust++
+  $("#dust-status").textContent = `no dust · ${Math.round((100 * missingDust) / Math.max(data.count, 1))} % unknown`
+  const dustButton = $("#dust")
+  dustButton.addEventListener("click", () => {
+    dust = !dust
+    stars.setDust(dust)
+    dustButton.textContent = dust ? "dust on" : "dust off"
+    dustButton.setAttribute("aria-pressed", String(dust))
+    $("#dust-status").hidden = dust
+    invalidate()
+  })
+  const spikeButton = $("#spikes")
+  spikeButton.addEventListener("click", () => {
+    spikes = !spikes
+    stars.setSpikes(spikes)
+    spikeButton.textContent = spikes ? "spikes on" : "spikes off"
+    spikeButton.setAttribute("aria-pressed", String(spikes))
+    invalidate()
+  })
   const mode = $("#exposure-mode")
   mode.addEventListener("click", () => {
     automatic = !automatic
@@ -180,7 +236,8 @@ async function main() {
         needsMeter = false
       }
       drawNumber++
-      toneMap(renderer, drawnExposure)
+      if (glow.value() > 0) bloom.render(renderer)
+      toneMap(renderer, drawnExposure, glow.value() / 100, sat.value())
       if (IS_BENCH) {
         // Reading one pixel waits for the GPU to finish, so the time includes the GPU's work, not only the CPU's.
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe)
@@ -218,14 +275,18 @@ function positionOf(data: StarData, index: number) {
 /** Stars are named by their row in the star file until the pipeline carries catalog ids and names. */
 const starName = (index: number) => (index === 0 ? "sun" : `star #${index}`)
 
-function describeStar(data: StarData, hit: StarHit) {
-  const kelvin = temperatureOf(colourIndexOf(data, hit.index))
+function describeStar(data: StarData, hit: StarHit, dust: boolean) {
+  const { kelvin, source } = displayTemperature(data, hit.index, dust)
+  const extinction = extinctionOf(data, hit.index)
+  const reddening = reddeningOf(data, hit.index)
   return [
     `<b>${starName(hit.index)}</b>`,
     hit.index === 0 ? "" : `<b>${formatDistance(positionOf(data, hit.index).length())}</b> from sun`,
-    `M <b>${absoluteMagnitudeOf(data, hit.index).toFixed(1)}</b>`,
+    `M <b>${(absoluteMagnitudeOf(data, hit.index) - (dust ? 0 : (extinction ?? 0))).toFixed(1)}</b>`,
     `m <b>${hit.apparentMag.toFixed(1)}</b>`,
-    `<b>${(Math.round(kelvin / 100) * 100).toLocaleString("en-US")}</b> K`,
+    `<b>${(Math.round(kelvin / 100) * 100).toLocaleString("en-US")}</b> K (${source})`,
+    extinction === undefined ? "" : `A_G <b>${extinction.toFixed(2)}</b> mag`,
+    reddening === undefined ? "" : `E(BP−RP) <b>${reddening.toFixed(2)}</b> mag`,
     `type <b>${spectralClassOf(kelvin)}</b>`,
   ]
     .filter(Boolean)

@@ -1,5 +1,5 @@
 import type * as THREE from "three"
-import { M_RANGE, type StarData } from "./load-stars.ts"
+import { extinctionOf, M_RANGE, type StarData } from "./load-stars.ts"
 import { pointSizeOf } from "./stars-layer.ts"
 
 /** Screen-space buckets for picking; a hit is searched in the bucket under the hand and its eight neighbours. */
@@ -11,6 +11,8 @@ type ScreenIndexOptions = {
   data: StarData
   camera: THREE.PerspectiveCamera
   viewport: () => { width: number; height: number }
+  dust: () => boolean
+  spikes: () => boolean
   magLimit: () => number
   exposure: () => number
 }
@@ -21,7 +23,7 @@ type Projection = { x: Float32Array; y: Float32Array; magnitude: Float32Array; s
  * Where each star bright enough to draw lands on screen, rebuilt once the camera settles rather than every frame.
  * Picking then costs a lookup in nine buckets instead of a pass over every star.
  */
-export function createScreenIndex({ data, camera, viewport, magLimit, exposure }: ScreenIndexOptions) {
+export function createScreenIndex({ data, camera, viewport, magLimit, exposure, dust, spikes }: ScreenIndexOptions) {
   let projection: Projection | undefined
   let columns = 0
   let rows = 0
@@ -30,7 +32,7 @@ export function createScreenIndex({ data, camera, viewport, magLimit, exposure }
 
   function rebuild() {
     const { width, height } = viewport()
-    projection = projectStars(data, camera, width, height, magLimit())
+    projection = projectStars(data, camera, width, height, magLimit(), dust())
     columns = Math.ceil(width / CELL_PX)
     rows = Math.ceil(height / CELL_PX)
     ;({ cellStart, cellSlots } = bucket(projection, columns, rows))
@@ -50,7 +52,7 @@ export function createScreenIndex({ data, camera, viewport, magLimit, exposure }
           const slot = cellSlots[k]
           const distance = Math.hypot(projection.x[slot] - x, projection.y[slot] - y)
           if (distance > rangePx) continue
-          const sizePx = pointSizeOf(projection.magnitude[slot], exposure())
+          const sizePx = pointSizeOf(projection.magnitude[slot], exposure(), spikes())
           const score = distance - sizePx
           if (score >= bestScore) continue
           bestScore = score
@@ -69,7 +71,7 @@ export function createScreenIndex({ data, camera, viewport, magLimit, exposure }
   }
 }
 
-function projectStars(data: StarData, camera: THREE.PerspectiveCamera, width: number, height: number, magLimit: number): Projection {
+function projectStars(data: StarData, camera: THREE.PerspectiveCamera, width: number, height: number, magLimit: number, dust: boolean): Projection {
   camera.updateMatrixWorld()
   const v = camera.matrixWorldInverse.elements
   const p = camera.projectionMatrix.elements
@@ -88,7 +90,8 @@ function projectStars(data: StarData, camera: THREE.PerspectiveCamera, width: nu
     const vy = v[1] * wx + v[5] * wy + v[9] * wz + v[13]
     const vz = v[2] * wx + v[6] * wy + v[10] * wz + v[14]
     if (vz >= 0) continue
-    const m = mLo + (data.absMag[i] / 255) * (mHi - mLo) + 5 * Math.log10(Math.max(Math.hypot(vx, vy, vz), 1e-6) / 10)
+    const correction = dust ? 0 : (extinctionOf(data, i) ?? 0)
+    const m = mLo - correction + (data.absMag[i] / 255) * (mHi - mLo) + 5 * Math.log10(Math.max(Math.hypot(vx, vy, vz), 1e-6) / 10)
     if (m > magLimit) continue
     const w = p[3] * vx + p[7] * vy + p[11] * vz + p[15]
     const sx = ((p[0] * vx + p[4] * vy + p[8] * vz + p[12]) / w + 1) * 0.5 * width
