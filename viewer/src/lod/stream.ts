@@ -5,7 +5,6 @@ import { selectNodes } from "./select-nodes"
 import { createTileLoader } from "./tile-loader"
 import type { decodeTile } from "./decode"
 import type { Hierarchy } from "./hierarchy"
-import { createGlowLayer } from "./glow-layer"
 
 type Options = Omit<Parameters<typeof createScreenIndex>[0], "data">
 export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Options, pixelRatio: number, budget: number, changed: () => void, debug: boolean) {
@@ -26,7 +25,6 @@ export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Optio
   let cachedPoints = 0,
     drawn: string[] = [],
     ready = false
-  const glow = createGlowLayer(tree, scene)
   const loader = createTileLoader(
     tree,
     (id, tile) => {
@@ -71,7 +69,6 @@ export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Optio
       cachedPoints -= item.data.count
     }
     loader.update(selection.request)
-    glow.update(selection.glows, options.dust())
     return { nodes: drawn.length, points: drawn.reduce((n, id) => n + tree.nodes[id].count, 0), pending: loader.active() }
   }
   return {

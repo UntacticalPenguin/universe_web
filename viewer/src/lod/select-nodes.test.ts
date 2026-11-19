@@ -24,11 +24,11 @@ const camera = new PerspectiveCamera(60, 1, 0.01, 1000)
 function choose(budget: number, loaded: string[], height = 1000, limit = Infinity) {
   return selectNodes(tree, camera, height, limit, budget, (id) => loaded.includes(id))
 }
-it("keeps a missing child as one glow and replaces it when its own points arrive", () => {
-  expect(choose(6, ["r"])).toEqual({ draw: ["r"], request: ["child"], glows: ["child"] })
+it("draws real parent stars while children load or remain below the detail threshold", () => {
+  expect(choose(6, ["r"])).toEqual({ draw: ["r"], request: ["child"] })
   expect(choose(6, ["r", "child"]).draw).toEqual(["r", "child"])
-  expect(choose(3, ["r", "child"]).glows).toEqual(["child"])
-  expect(choose(6, ["r", "child"], 100).glows).toEqual(["child"])
+  expect(choose(3, ["r", "child"])).toEqual({ draw: ["r"], request: [] })
+  expect(choose(6, ["r", "child"], 100)).toEqual({ draw: ["r"], request: [] })
 })
 it("rejects an invisible or too faint subtree", () => {
   expect(choose(6, [], 1000, -10).request).toEqual([])
