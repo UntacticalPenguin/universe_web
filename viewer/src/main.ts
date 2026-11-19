@@ -18,6 +18,9 @@ import { createGlow } from "./render/glow.ts"
 import { createToneMap } from "./render/tone-map.ts"
 import { createLuminanceMeter } from "./render/auto-exposure.ts"
 import { targetExposure, updateExposure } from "./render/light.ts"
+import { loadHierarchy } from "./lod/hierarchy"
+import { createStream } from "./lod/stream"
+import { catalog, diskOutline, type Landmark } from "./view/catalog"
 import { createFlight } from "./view/flight.ts"
 
 const params = new URLSearchParams(window.location.search)
@@ -52,9 +55,19 @@ async function main() {
   controls.autoRotate = IS_BENCH
   controls.autoRotateSpeed = 6
 
-  const data = await loadStars(STAR_FILE)
-  const stars = createStarsLayer(data, pixelRatio)
-  scene.add(stars.points)
+  const tree = params.has("stars") ? null : await loadHierarchy(import.meta.env.BASE_URL)
+  const data = tree ? undefined : await loadStars(STAR_FILE)
+  const stars = data ? createStarsLayer(data, pixelRatio) : undefined
+  if (stars) scene.add(stars.points)
+  const overlay = new THREE.Scene()
+  const outline = diskOutline()
+  overlay.add(outline)
+  const outlineToggle = $("#outline")
+  outlineToggle.onclick = () => {
+    outline.visible = !outline.visible
+    outlineToggle.setAttribute("aria-pressed", String(outline.visible))
+    invalidate()
+  }
 
   const canvas = renderer.domElement
   const hdr = createHdrTarget(canvas.width, canvas.height)
@@ -83,8 +96,9 @@ async function main() {
   }
   controls.addEventListener("change", invalidate)
 
-  let targetIndex = 0
-  const targetName = () => starName(targetIndex)
+  let targetName = "Sun"
+  const targetPosition = new THREE.Vector3()
+  controls.enablePan = false
   const flight = createFlight(camera, controls)
 
   const orbit = createCinematicOrbit(camera, controls)
@@ -97,24 +111,50 @@ async function main() {
   })
   const allPosition = 20.1
   const cutoff = (m: number) => (m >= allPosition ? Infinity : m)
-  const screenIndex = createScreenIndex({
-    data,
+  const indexOptions = {
     camera,
     viewport,
     magLimit: () => cutoff(magSelector.value()),
     exposure: () => drawnExposure,
     dust: () => dust,
     spikes: () => spikes,
-  })
+  }
+  const requestedBudget = Number(params.get("budget"))
+  const budget = requestedBudget > 0 && Number.isFinite(requestedBudget) ? Math.floor(requestedBudget) : 3000000
+  const stream = tree ? createStream(tree, scene, indexOptions, pixelRatio, budget, invalidate, params.get("debug") === "1") : undefined
+  const screenIndex = stream ?? createScreenIndex({ ...indexOptions, data: data! })
+  const buttons = new Map<string, HTMLButtonElement>()
+  function select(id: string) {
+    for (const [key, button] of buttons) button.setAttribute("aria-pressed", String(key === id))
+  }
+  function focus(object: Landmark, frame = true) {
+    targetName = object.name
+    targetPosition.set(...object.position)
+    select(object.id)
+    if (frame) flight.setDistance(object.distance)
+    flight.to(targetPosition)
+    invalidate()
+  }
+  for (const object of catalog) {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.textContent = object.name
+    button.onclick = () => focus(object)
+    buttons.set(object.id, button)
+    $("#catalog").append(button)
+  }
+  select("sun")
   const pointer = createPointer({
     layer: $("#cursor"),
     surface: renderer.domElement,
     pick: (x, y, range) => screenIndex.nearest(x, y, range),
-    describe: (hit) => describeStar(data, hit, dust),
+    describe: (hit) => describeStar(hit.data ?? data!, hit, dust),
     onSelect: (hit) => {
       orbit.stop()
-      targetIndex = hit.index
-      flight.to(positionOf(data, hit.index))
+      targetName = hit.tileId ? hit.tileId + " #" + hit.index : starName(hit.index)
+      select("")
+      targetPosition.copy(positionOf(hit.data ?? data!, hit.index))
+      flight.to(targetPosition)
       invalidate()
     },
   })
@@ -126,7 +166,7 @@ async function main() {
     step: 0.1,
     value: allPosition,
     format: (m) => (m >= allPosition ? "all" : m.toFixed(1)),
-    onInput: (m) => (stars.setMagLimit(cutoff(m)), invalidate()),
+    onInput: (m) => (stars?.setMagLimit(cutoff(m)), invalidate()),
   })
   const exposureSelector = createSlider({
     element: $<HTMLInputElement>("#exposure-value"),
@@ -160,12 +200,12 @@ async function main() {
     onInput: invalidate,
   })
   let missingDust = 0
-  for (let i = 0; i < data.count; i++) if (data.extinction[i] === MISSING && data.reddening[i] === MISSING) missingDust++
-  $("#dust-status").textContent = `no dust · ${Math.round((100 * missingDust) / Math.max(data.count, 1))} % unknown`
+  for (let i = 0; data && i < data.count; i++) if (data.extinction[i] === MISSING && data.reddening[i] === MISSING) missingDust++
+  $("#dust-status").textContent = !data ? "dust correction disabled" : `no dust · ${Math.round((100 * missingDust) / Math.max(data.count, 1))} % unknown`
   const dustButton = $("#dust")
   dustButton.addEventListener("click", () => {
     dust = !dust
-    stars.setDust(dust)
+    stars?.setDust(dust)
     dustButton.textContent = dust ? "dust on" : "dust off"
     dustButton.setAttribute("aria-pressed", String(dust))
     $("#dust-status").hidden = dust
@@ -174,7 +214,7 @@ async function main() {
   const spikeButton = $("#spikes")
   spikeButton.addEventListener("click", () => {
     spikes = !spikes
-    stars.setSpikes(spikes)
+    stars?.setSpikes(spikes)
     spikeButton.textContent = spikes ? "spikes on" : "spikes off"
     spikeButton.setAttribute("aria-pressed", String(spikes))
     invalidate()
@@ -188,7 +228,16 @@ async function main() {
     invalidate()
   })
 
-  const { counts, extent } = countPerDecade(data.positions, data.count)
+  const { counts, extent } = countPerDecade(data?.positions ?? new Float32Array(), data?.count ?? 0)
+  // In streaming mode the ruler estimates the distribution from each tile’s own payload.
+  if (tree)
+    for (const node of Object.values(tree.nodes)) {
+      const r = Math.max(0.001, Math.hypot(...node.center))
+      const bin = Math.floor(Math.log10(r)) + 3
+      if (bin >= 0 && bin < counts.length) counts[bin] += node.count
+      extent[0] = Math.min(extent[0], Math.max(0.001, r - Math.sqrt(3) * node.half))
+      extent[1] = Math.max(extent[1], r + Math.sqrt(3) * node.half)
+    }
   const rail = createScaleRail({
     element: $<SVGSVGElement>("#rail"),
     starsPerDecade: counts,
@@ -200,12 +249,11 @@ async function main() {
     },
   })
 
-  $("#home").onclick = () => {
-    targetIndex = 0
-    flight.to(new THREE.Vector3())
-    invalidate()
-  }
-
+  $("#home").onclick = () => focus(catalog[0], false)
+  const initial = catalog.find((object) => object.id === params.get("focus"))
+  if (initial) focus(initial)
+  const tileStatus = $("#tile-status")
+  if (!stream) tileStatus.textContent = "Single-file catalog"
   const showTray = createTray($("#tray"))
   const placeTargetMark = createTargetMark($("#target"), camera)
   let visible: number | undefined
@@ -235,7 +283,11 @@ async function main() {
       const startedAt = performance.now()
       if (automatic) baseExposure = updateExposure(baseExposure, desiredExposure, seconds)
       drawnExposure = baseExposure * 2 ** exposureSelector.value()
-      stars.setExposure(drawnExposure)
+      stars?.setExposure(drawnExposure)
+      if (stream) {
+        const state = stream.update()
+        tileStatus.textContent = `Octree · ${state.nodes} tiles · ${state.points.toLocaleString("en-US")} points · ${state.pending} loading`
+      }
       renderer.setRenderTarget(hdr)
       renderer.render(scene, camera)
       if (automatic && drawNumber - lastMeterDraw >= 4) {
@@ -246,6 +298,9 @@ async function main() {
       drawNumber++
       if (glow.value() > 0) bloom.render(renderer)
       toneMap(renderer, drawnExposure, glow.value() / 100, sat.value())
+      renderer.autoClear = false
+      renderer.render(overlay, camera)
+      renderer.autoClear = true
       if (IS_BENCH) {
         // Reading one pixel waits for the GPU to finish, so the time includes the GPU's work, not only the CPU's.
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe)
@@ -255,7 +310,7 @@ async function main() {
       isDirty = automatic && (needsMeter || Math.abs(desiredExposure - baseExposure) > 0.01 * baseExposure)
       framesThisSecond++
       visible = undefined
-      placeTargetMark(controls.target, targetName(), window.innerWidth, window.innerHeight)
+      placeTargetMark(targetPosition, targetName, window.innerWidth, window.innerHeight)
       rail.setDistance(flight.distance())
     } else if (!screenIndex.isReady() && now - lastChange > SETTLE_MS) {
       visible = screenIndex.rebuild()
@@ -266,7 +321,14 @@ async function main() {
       framesThisSecond = 0
       secondStartedAt = now
     }
-    showTray({ target: targetName(), distancePc: flight.distance(), loaded: data.count, visible, fps, drawMs: IS_BENCH ? median(drawTimes) : undefined })
+    showTray({
+      target: targetName,
+      distancePc: flight.distance(),
+      loaded: stream?.loaded() ?? data!.count,
+      visible,
+      fps,
+      drawMs: IS_BENCH ? median(drawTimes) : undefined,
+    })
   })
 }
 
@@ -284,12 +346,13 @@ function positionOf(data: StarData, index: number) {
 const starName = (index: number) => (index === 0 ? "sun" : `star #${index}`)
 
 function describeStar(data: StarData, hit: StarHit, dust: boolean) {
+  if (hit.tileId?.startsWith("lmc/")) return `<b>OGLE-III LMC field</b> · V ≈ ${hit.apparentMag.toFixed(1)} from camera · adopted distance 49.59 kpc`
   const { kelvin, source } = displayTemperature(data, hit.index, dust)
   const extinction = extinctionOf(data, hit.index)
   const reddening = reddeningOf(data, hit.index)
   return [
-    `<b>${starName(hit.index)}</b>`,
-    hit.index === 0 ? "" : `<b>${formatDistance(positionOf(data, hit.index).length())}</b> from sun`,
+    `<b>${hit.tileId ? hit.tileId + " #" + hit.index : starName(hit.index)}</b>`,
+    !hit.tileId && hit.index === 0 ? "" : `<b>${formatDistance(positionOf(data, hit.index).length())}</b> from sun`,
     `M <b>${(absoluteMagnitudeOf(data, hit.index) - (dust ? 0 : (extinction ?? 0))).toFixed(1)}</b>`,
     `m <b>${hit.apparentMag.toFixed(1)}</b>`,
     `<b>${(Math.round(kelvin / 100) * 100).toLocaleString("en-US")}</b> K (${source})`,

@@ -289,6 +289,14 @@
         background: var(--ink);
         color: var(--bg);
       }
+      #catalog {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 3px;
+      }
+      #controls a {
+        color: inherit;
+      }
       #controls #home {
         position: absolute;
         right: 0;
@@ -450,6 +458,21 @@
       <details id="settings" open>
         <summary id="drawer-toggle"><span class="show-label">Show settings</span><span class="hide-label">Hide settings</span></summary>
         <div id="controls-body">
+          <h2>Object catalog</h2>
+          <div id="catalog" role="group" aria-label="Lock orbit to an object"></div>
+          <div class="switch-row">
+            <span>Milky Way outline</span><button id="outline" aria-pressed="true" title="Approximate 30 kpc stellar disk">Outline</button>
+          </div>
+          <p class="hint" id="tile-status" aria-label="Catalog streaming status"></p>
+          <details>
+            <summary>Catalog notes</summary>
+            <p>
+              Named-star landmarks use <a href="https://github.com/astronexus/HYG-Database">HYG v4.0</a> coordinates adapted under
+              <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>. The dashed line marks the approximate stellar disk. OGLE-III LMC field
+              sources share an adopted 49.59 kpc distance and can include foreground stars. V and V−I approximate brightness and colour.
+              <a href="https://ftp.astrouw.edu.pl/ogle/ogle3/maps/lmc/README">OGLE-III photometric maps</a> (Udalski et al. 2008).
+            </p>
+          </details>
           <h2>Cinematic orbit</h2>
           <div class="play-row"><span id="heading-arrow" aria-hidden="true">→</span><button id="orbit-play" aria-pressed="false">▶ Play orbit</button></div>
           <label class="slider" for="orbit-direction"

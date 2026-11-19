@@ -5,7 +5,7 @@ import { pointSizeOf } from "./stars-layer.ts"
 /** Screen-space buckets for picking; a hit is searched in the bucket under the hand and its eight neighbours. */
 const CELL_PX = 32
 
-export type StarHit = { index: number; x: number; y: number; sizePx: number; apparentMag: number }
+export type StarHit = { data?: StarData; tileId?: string; index: number; x: number; y: number; sizePx: number; apparentMag: number }
 
 type ScreenIndexOptions = {
   data: StarData

@@ -17,12 +17,20 @@ const vertexShader = /* glsl */ `
   uniform float uMagLimit;
   uniform float uExposure;
   uniform float uPixelRatio;
+  #ifdef TILE
+  uniform vec3 uOffset;
+  uniform float uHalf;
+  #endif
   varying vec3 vColour;
   varying float vIntensity;
   varying float vSpikeWidth;
 
   void main() {
+    #ifdef TILE
+    vec4 viewPosition = vec4(mat3(viewMatrix) * (uOffset + position*uHalf),1.);
+    #else
     vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+    #endif
     float parsecs = max(length(viewPosition.xyz), 1e-6);
     float absoluteMag = mix(${M_RANGE[0].toFixed(1)}, ${M_RANGE[1].toFixed(1)}, aAbsMag);
     if (!uDust && aExtinction < 255.0) absoluteMag -= 8.0 * aExtinction / 254.0;
@@ -72,9 +80,10 @@ const fragmentShader = /* glsl */ `
 
 export type StarsLayer = ReturnType<typeof createStarsLayer>
 
-export function createStarsLayer(data: StarData, pixelRatio: number) {
+let sharedLut: THREE.DataTexture | undefined
+export function createStarsLayer(data: StarData, pixelRatio: number, tile?: { offsets: Int16Array; half: number }, lut = (sharedLut ??= createColourLut())) {
   const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute("position", new THREE.BufferAttribute(data.positions, 3))
+  geometry.setAttribute("position", new THREE.BufferAttribute(tile?.offsets ?? data.positions, 3, !!tile))
   geometry.setAttribute("aAbsMag", new THREE.BufferAttribute(data.absMag, 1, true))
   geometry.setAttribute("aColour", new THREE.BufferAttribute(data.colour, 1, true))
 
@@ -82,14 +91,17 @@ export function createStarsLayer(data: StarData, pixelRatio: number) {
   geometry.setAttribute("aExtinction", new THREE.BufferAttribute(data.extinction, 1))
   geometry.setAttribute("aReddening", new THREE.BufferAttribute(data.reddening, 1))
   const uniforms = {
+    uOffset: { value: new THREE.Vector3() },
+    uHalf: { value: tile?.half ?? 1 },
     uDust: { value: true },
     uSpikes: { value: false },
-    uLut: { value: createColourLut() },
+    uLut: { value: lut },
     uMagLimit: { value: Infinity },
     uExposure: { value: 1 },
     uPixelRatio: { value: pixelRatio },
   }
   const material = new THREE.ShaderMaterial({
+    defines: tile ? { TILE: 1 } : {},
     vertexShader,
     fragmentShader,
     uniforms,
@@ -103,6 +115,11 @@ export function createStarsLayer(data: StarData, pixelRatio: number) {
 
   return {
     points,
+    offset: uniforms.uOffset.value,
+    dispose: () => {
+      geometry.dispose()
+      material.dispose()
+    },
     setDust: (enabled: boolean) => (uniforms.uDust.value = enabled),
     setSpikes: (enabled: boolean) => (uniforms.uSpikes.value = enabled),
     setMagLimit: (magnitude: number) => (uniforms.uMagLimit.value = magnitude),
