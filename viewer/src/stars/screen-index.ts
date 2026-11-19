@@ -50,7 +50,7 @@ export function createScreenIndex({ data, camera, viewport, magLimit, exposure }
           const slot = cellSlots[k]
           const distance = Math.hypot(projection.x[slot] - x, projection.y[slot] - y)
           if (distance > rangePx) continue
-          const sizePx = pointSizeOf(projection.magnitude[slot], magLimit(), exposure())
+          const sizePx = pointSizeOf(projection.magnitude[slot], exposure())
           const score = distance - sizePx
           if (score >= bestScore) continue
           bestScore = score
