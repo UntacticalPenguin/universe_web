@@ -3,7 +3,8 @@ import * as THREE from "three"
 import { OrbitControls } from "three/addons/controls/OrbitControls.js"
 import { $ } from "./dom.ts"
 import { formatDistance } from "./format.ts"
-import { createKnob } from "./hud/knob.ts"
+import { createSelector } from "./hud/value-selector.ts"
+import { createOrbitGlobe } from "./hud/orbit-globe.ts"
 import { createPointer } from "./hud/pointer.ts"
 import { countPerDecade, createScaleRail } from "./hud/scale-rail.ts"
 import { createTargetMark } from "./hud/target-mark.ts"
@@ -85,13 +86,38 @@ async function main() {
   const targetName = () => starName(targetIndex)
   const flight = createFlight(camera, controls)
 
+  const orbit = createOrbitGlobe(camera, controls)
+  const drawer = $("#controls-body")
+  const drawerToggle = $("#drawer-toggle")
+  function setOpen(open: boolean) {
+    drawer.hidden = !open
+    drawerToggle.setAttribute("aria-expanded", String(open))
+    if (!open) orbit.stop()
+  }
+  drawerToggle.onclick = () => setOpen(drawer.hidden)
+  setOpen(!window.matchMedia("(max-width: 640px)").matches)
+  drawer.onkeydown = (e) => {
+    if (e.key === "Escape") {
+      setOpen(false)
+      drawerToggle.focus()
+    }
+  }
+  const sunButton = $("#home")
+  let savedView: { index: number; position: THREE.Vector3; target: THREE.Vector3 } | undefined
+
+  controls.addEventListener("change", () => {
+    if (savedView && controls.target.lengthSq() > 1e-16) {
+      savedView = undefined
+      sunButton.setAttribute("aria-pressed", "false")
+    }
+  })
   const allPosition = 20.1
   const cutoff = (m: number) => (m >= allPosition ? Infinity : m)
   const screenIndex = createScreenIndex({
     data,
     camera,
     viewport,
-    magLimit: () => cutoff(magKnob.value()),
+    magLimit: () => cutoff(magSelector.value()),
     exposure: () => drawnExposure,
     dust: () => dust,
     spikes: () => spikes,
@@ -102,15 +128,17 @@ async function main() {
     pick: (x, y, range) => screenIndex.nearest(x, y, range),
     describe: (hit) => describeStar(data, hit, dust),
     onSelect: (hit) => {
+      orbit.stop()
+      savedView = undefined
+      sunButton.setAttribute("aria-pressed", "false")
       targetIndex = hit.index
       flight.to(positionOf(data, hit.index))
       invalidate()
     },
   })
 
-  const magKnob = createKnob({
-    element: $<HTMLButtonElement>("#mag-knob"),
-    output: $("#mag-value"),
+  const magSelector = createSelector({
+    element: $<HTMLSelectElement>("#mag-value"),
     min: 2,
     max: allPosition,
     step: 0.1,
@@ -118,9 +146,8 @@ async function main() {
     format: (m) => (m >= allPosition ? "all" : m.toFixed(1)),
     onInput: (m) => (stars.setMagLimit(cutoff(m)), invalidate()),
   })
-  const exposureKnob = createKnob({
-    element: $<HTMLButtonElement>("#exposure-knob"),
-    output: $("#exposure-value"),
+  const exposureSelector = createSelector({
+    element: $<HTMLSelectElement>("#exposure-value"),
     min: -3,
     max: 3,
     step: 0.1,
@@ -129,9 +156,8 @@ async function main() {
     onInput: invalidate,
   })
 
-  const sat = createKnob({
-    element: $<HTMLButtonElement>("#sat-knob"),
-    output: $("#sat-value"),
+  const sat = createSelector({
+    element: $<HTMLSelectElement>("#sat-value"),
     min: 1,
     max: 3,
     step: 0.1,
@@ -142,9 +168,8 @@ async function main() {
       invalidate()
     },
   })
-  const glow = createKnob({
-    element: $<HTMLButtonElement>("#glow-knob"),
-    output: $("#glow-value"),
+  const glow = createSelector({
+    element: $<HTMLSelectElement>("#glow-value"),
     min: 0,
     max: 20,
     step: 1,
@@ -193,11 +218,25 @@ async function main() {
     },
   })
 
-  $("#home").addEventListener("click", () => {
-    targetIndex = 0
-    flight.to(new THREE.Vector3())
+  sunButton.onclick = () => {
+    orbit.stop()
+    flight.cancel()
+    if (savedView) {
+      targetIndex = savedView.index
+      camera.position.copy(savedView.position)
+      controls.target.copy(savedView.target)
+      savedView = undefined
+      sunButton.setAttribute("aria-pressed", "false")
+    } else {
+      savedView = { index: targetIndex, position: camera.position.clone(), target: controls.target.clone() }
+      targetIndex = 0
+      controls.target.set(0, 0, 0)
+      camera.position.copy(START_OFFSET)
+      sunButton.setAttribute("aria-pressed", "true")
+    }
+    controls.update()
     invalidate()
-  })
+  }
 
   const showTray = createTray($("#tray"))
   const placeTargetMark = createTargetMark($("#target"), camera)
@@ -221,12 +260,13 @@ async function main() {
   renderer.setAnimationLoop((now: number) => {
     const seconds = Math.max(0, (now - previousTime) / 1000)
     previousTime = now
+    orbit.step(seconds)
     if (flight.step(now)) invalidate()
     controls.update()
     if (isDirty) {
       const startedAt = performance.now()
       if (automatic) baseExposure = updateExposure(baseExposure, desiredExposure, seconds)
-      drawnExposure = baseExposure * 2 ** exposureKnob.value()
+      drawnExposure = baseExposure * 2 ** exposureSelector.value()
       stars.setExposure(drawnExposure)
       renderer.setRenderTarget(hdr)
       renderer.render(scene, camera)
