@@ -282,6 +282,7 @@
           color: var(--ink-2);
         }
       }
+      #exposure-mode,
       #home {
         padding: 0 var(--gap);
         border: none;
@@ -324,15 +325,16 @@
       </span>
       <span class="zone">
         <span data-field="mag"
-          ><button id="mag-knob" class="knob" type="button" aria-label="magnitude limit"></button><abbr title="faintest apparent magnitude drawn">mag</abbr
-          ><b id="mag-value"></b
+          ><button id="mag-knob" class="knob" type="button" aria-label="magnitude limit"></button
+          ><abbr title="draw stars brighter than this magnitude, or all stars">mag</abbr><b id="mag-value"></b
         ></span>
         <span data-field="exposure"
-          ><button id="exposure-knob" class="knob" type="button" aria-label="exposure in stops"></button><abbr title="exposure, in stops">exp</abbr
+          ><button id="exposure-knob" class="knob" type="button" aria-label="exposure in stops"></button><abbr title="exposure offset in stops">exp</abbr
           ><b id="exposure-value"></b
         ></span>
       </span>
       <span class="zone">
+        <button id="exposure-mode" type="button" aria-label="Automatic exposure" aria-pressed="true">auto</button>
         <span data-field="fps"><abbr title="frames drawn in the last second; idle while nothing changes">fps</abbr><b>—</b></span>
         <span data-field="draw" hidden><abbr title="median time to draw one frame, GPU included (benchmark mode)">draw ms</abbr><b>—</b></span>
       </span>

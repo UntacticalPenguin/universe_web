@@ -1,4 +1,6 @@
 import * as THREE from "three"
+import { luminanceWeights, profileArea } from "../render/light.ts"
+export { pointSizeOf } from "../render/light.ts"
 import { createColourLut } from "./colour-lut.ts"
 import { M_RANGE, type StarData } from "./load-stars.ts"
 
@@ -24,11 +26,12 @@ const vertexShader = /* glsl */ `
       gl_PointSize = 0.0;
       return;
     }
-    float flux = pow(10.0, -0.4 * (apparentMag - uMagLimit)) * uExposure;
-    vIntensity = 1.0 - exp(-0.08 * flux);
-    vColour = texture2D(uLut, vec2(aColour, 0.5)).rgb;
+    float flux = pow(10.0, -0.4 * (apparentMag - 6.0));
+    vec3 rgb = texture2D(uLut, vec2(aColour, 0.5)).rgb;
+    vColour = rgb / dot(rgb, vec3(${luminanceWeights.join(",")}));
     gl_Position = projectionMatrix * viewPosition;
-    gl_PointSize = clamp(2.0 + 1.6 * log(1.0 + 0.02 * flux), 2.0, 14.0) * uPixelRatio;
+    gl_PointSize = clamp(1.5 + 2.5 * log2(1.0 + flux * uExposure) * 0.30103, 1.5, 16.0) * uPixelRatio;
+    vIntensity = flux / (${profileArea} * gl_PointSize * gl_PointSize);
   }
 `
 
@@ -41,7 +44,6 @@ const fragmentShader = /* glsl */ `
     float r2 = dot(offset, offset) * 4.0;
     if (r2 > 1.0) discard;
     gl_FragColor = vec4(vColour * vIntensity * exp(-r2 * 4.0), 1.0);
-    #include <colorspace_fragment>
   }
 `
 
@@ -55,7 +57,7 @@ export function createStarsLayer(data: StarData, pixelRatio: number) {
 
   const uniforms = {
     uLut: { value: createColourLut() },
-    uMagLimit: { value: 12 },
+    uMagLimit: { value: Infinity },
     uExposure: { value: 1 },
     uPixelRatio: { value: pixelRatio },
   }
@@ -74,12 +76,6 @@ export function createStarsLayer(data: StarData, pixelRatio: number) {
   return {
     points,
     setMagLimit: (magnitude: number) => (uniforms.uMagLimit.value = magnitude),
-    setExposure: (stops: number) => (uniforms.uExposure.value = 2 ** stops),
+    setExposure: (exposure: number) => (uniforms.uExposure.value = exposure),
   }
-}
-
-/** On-screen diameter in CSS pixels of a star of `apparentMag`, as the vertex shader draws it. */
-export function pointSizeOf(apparentMag: number, magLimit: number, exposureStops: number) {
-  const flux = 10 ** (-0.4 * (apparentMag - magLimit)) * 2 ** exposureStops
-  return Math.min(14, Math.max(2, 2 + 1.6 * Math.log(1 + 0.02 * flux)))
 }

@@ -12,6 +12,10 @@ import { spectralClassOf, temperatureOf } from "./stars/colour-lut.ts"
 import { absoluteMagnitudeOf, colourIndexOf, loadStars, type StarData } from "./stars/load-stars.ts"
 import { createScreenIndex, type StarHit } from "./stars/screen-index.ts"
 import { createStarsLayer } from "./stars/stars-layer.ts"
+import { createHdrTarget } from "./render/hdr-target.ts"
+import { createToneMap } from "./render/tone-map.ts"
+import { createLuminanceMeter } from "./render/auto-exposure.ts"
+import { targetExposure, updateExposure } from "./render/light.ts"
 import { createFlight } from "./view/flight.ts"
 
 const params = new URLSearchParams(window.location.search)
@@ -49,9 +53,22 @@ async function main() {
   const stars = createStarsLayer(data, pixelRatio)
   scene.add(stars.points)
 
+  const canvas = renderer.domElement
+  const hdr = createHdrTarget(canvas.width, canvas.height)
+  const toneMap = createToneMap(hdr.texture)
+  const measureMean = createLuminanceMeter(hdr)
+  let automatic = true
+  let baseExposure = 1
+  let desiredExposure = 1
+  let drawnExposure = 1
+  let needsMeter = true
+  let drawNumber = 0
+  let lastMeterDraw = -4
+  let previousTime = performance.now()
   let isDirty = true
   let lastChange = performance.now()
   const invalidate = () => {
+    needsMeter = true
     isDirty = true
     lastChange = performance.now()
     screenIndex.clear()
@@ -63,7 +80,9 @@ async function main() {
   const targetName = () => starName(targetIndex)
   const flight = createFlight(camera, controls)
 
-  const screenIndex = createScreenIndex({ data, camera, viewport, magLimit: () => magKnob.value(), exposure: () => exposureKnob.value() })
+  const allPosition = 20.1
+  const cutoff = (m: number) => (m >= allPosition ? Infinity : m)
+  const screenIndex = createScreenIndex({ data, camera, viewport, magLimit: () => cutoff(magKnob.value()), exposure: () => drawnExposure })
   const pointer = createPointer({
     layer: $("#cursor"),
     surface: renderer.domElement,
@@ -80,11 +99,11 @@ async function main() {
     element: $<HTMLButtonElement>("#mag-knob"),
     output: $("#mag-value"),
     min: 2,
-    max: 20,
+    max: allPosition,
     step: 0.1,
-    value: 12,
-    format: (m) => m.toFixed(1),
-    onInput: (m) => (stars.setMagLimit(m), invalidate()),
+    value: allPosition,
+    format: (m) => (m >= allPosition ? "all" : m.toFixed(1)),
+    onInput: (m) => (stars.setMagLimit(cutoff(m)), invalidate()),
   })
   const exposureKnob = createKnob({
     element: $<HTMLButtonElement>("#exposure-knob"),
@@ -94,7 +113,16 @@ async function main() {
     step: 0.1,
     value: 0,
     format: (stops) => `${stops >= 0 ? "+" : ""}${stops.toFixed(1)}`,
-    onInput: (stops) => (stars.setExposure(stops), invalidate()),
+    onInput: invalidate,
+  })
+
+  const mode = $("#exposure-mode")
+  mode.addEventListener("click", () => {
+    automatic = !automatic
+    mode.textContent = automatic ? "auto" : "fixed"
+    mode.setAttribute("aria-pressed", String(automatic))
+    desiredExposure = baseExposure
+    invalidate()
   })
 
   const { counts, extent } = countPerDecade(data.positions, data.count)
@@ -129,23 +157,37 @@ async function main() {
     camera.aspect = window.innerWidth / window.innerHeight
     camera.updateProjectionMatrix()
     renderer.setSize(window.innerWidth, window.innerHeight)
+    hdr.setSize(canvas.width, canvas.height)
     rail.layout()
     invalidate()
   })
 
   renderer.setAnimationLoop((now: number) => {
+    const seconds = Math.max(0, (now - previousTime) / 1000)
+    previousTime = now
     if (flight.step(now)) invalidate()
     controls.update()
     if (isDirty) {
       const startedAt = performance.now()
+      if (automatic) baseExposure = updateExposure(baseExposure, desiredExposure, seconds)
+      drawnExposure = baseExposure * 2 ** exposureKnob.value()
+      stars.setExposure(drawnExposure)
+      renderer.setRenderTarget(hdr)
       renderer.render(scene, camera)
+      if (automatic && drawNumber - lastMeterDraw >= 4) {
+        desiredExposure = targetExposure(measureMean(renderer))
+        lastMeterDraw = drawNumber
+        needsMeter = false
+      }
+      drawNumber++
+      toneMap(renderer, drawnExposure)
       if (IS_BENCH) {
         // Reading one pixel waits for the GPU to finish, so the time includes the GPU's work, not only the CPU's.
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe)
         drawTimes.push(performance.now() - startedAt)
         if (drawTimes.length > BENCH_WINDOW) drawTimes.shift()
       }
-      isDirty = false
+      isDirty = automatic && (needsMeter || Math.abs(desiredExposure - baseExposure) > 0.01 * baseExposure)
       framesThisSecond++
       visible = undefined
       placeTargetMark(controls.target, targetName(), window.innerWidth, window.innerHeight)
