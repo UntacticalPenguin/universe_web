@@ -1,5 +1,7 @@
 /** Stars as written by pipeline/prepare.py; the layout is documented there. */
 export type StarData = {
+  /** GDI1 rows: Gaia ID (uint64), then lower, median, upper distances (float32 pc). */
+  distances?: DataView
   count: number
   /** x, y, z in parsecs, heliocentric galactic: x toward the galactic centre, z toward the north galactic pole. */
   positions: Float32Array

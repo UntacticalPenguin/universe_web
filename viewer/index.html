@@ -458,6 +458,12 @@
       <details id="settings" open>
         <summary id="drawer-toggle"><span class="show-label">Show settings</span><span class="hide-label">Hide settings</span></summary>
         <div id="controls-body">
+          <section id="deep-controls" hidden>
+            <h2>Gaia preview</h2>
+            <div class="switch-row"><span>Fainter stars</span><button id="deep-toggle" aria-pressed="false">Off</button></div>
+            <div class="switch-row"><span>Distance error ≤ 20%</span><button id="quality-toggle" aria-pressed="false" disabled>Off</button></div>
+            <p class="hint" id="deep-count"></p>
+          </section>
           <h2>Object catalog</h2>
           <div id="catalog" role="group" aria-label="Lock orbit to an object"></div>
           <div class="switch-row">
@@ -466,6 +472,11 @@
           <p class="hint" id="tile-status" aria-label="Catalog streaming status"></p>
           <details>
             <summary>Catalog notes</summary>
+            <p>
+              The preview adds an all-sky random sample with Gaia G between 13 and 17. Hover a preview star for its Gaia ID and Bailer-Jones distance interval.
+              The filter applies to added stars and uses half the 16th–84th percentile range divided by the median. Sampled point density depends on survey
+              coverage and brightness.
+            </p>
             <p>
               Named-star landmarks use <a href="https://github.com/astronexus/HYG-Database">HYG v4.0</a> coordinates adapted under
               <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>. The dashed line marks the approximate stellar disk. OGLE-III LMC field
