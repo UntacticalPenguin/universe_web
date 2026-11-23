@@ -229,15 +229,43 @@ async function main() {
   })
 
   const { counts, extent } = countPerDecade(data?.positions ?? new Float32Array(), data?.count ?? 0)
-  // In streaming mode the ruler estimates the distribution from each tile’s own payload.
-  if (tree)
-    for (const node of Object.values(tree.nodes)) {
-      const r = Math.max(0.001, Math.hypot(...node.center))
-      const bin = Math.floor(Math.log10(r)) + 3
-      if (bin >= 0 && bin < counts.length) counts[bin] += node.count
-      extent[0] = Math.min(extent[0], Math.max(0.001, r - Math.sqrt(3) * node.half))
-      extent[1] = Math.max(extent[1], r + Math.sqrt(3) * node.half)
+  const allRoots = tree?.roots.slice() ?? []
+  const available = allRoots.includes("deep/r") && allRoots.includes("deep-wide/r")
+  let deeper = available && params.get("preview") === "deep"
+  let precise = params.get("quality") === "precise"
+  const toggle = $<HTMLButtonElement>("#deep-toggle"),
+    quality = $<HTMLButtonElement>("#quality-toggle")
+  $("#deep-controls").hidden = !available
+  function updateCatalog() {
+    if (!tree) return
+    const activeSurveys = new Set(["stars", "lmc"])
+    if (deeper) {
+      activeSurveys.add("deep")
+      if (!precise) activeSurveys.add("deep-wide")
     }
+    tree.roots = allRoots.filter((id) => activeSurveys.has(tree.nodes[id].survey))
+    counts.fill(0)
+    extent[0] = Infinity
+    extent[1] = 0
+    // In streaming mode the ruler estimates the distribution from each tile’s own payload.
+    if (tree)
+      for (const node of Object.values(tree.nodes)) {
+        if (!activeSurveys.has(node.survey)) continue
+        const r = Math.max(0.001, Math.hypot(...node.center))
+        const bin = Math.floor(Math.log10(r)) + 3
+        if (bin >= 0 && bin < counts.length) counts[bin] += node.count
+        extent[0] = Math.min(extent[0], Math.max(0.001, r - Math.sqrt(3) * node.half))
+        extent[1] = Math.max(extent[1], r + Math.sqrt(3) * node.half)
+      }
+    const extra = tree.roots.filter((id) => tree.nodes[id].survey.startsWith("deep")).reduce((n, id) => n + tree.nodes[id].subtreeCount, 0)
+    $("#deep-count").textContent = deeper ? extra.toLocaleString("en-US") + " additional Gaia sources" : "Bright catalog"
+    toggle.setAttribute("aria-pressed", String(deeper))
+    toggle.textContent = deeper ? "On" : "Off"
+    quality.disabled = !deeper
+    quality.setAttribute("aria-pressed", String(deeper && precise))
+    quality.textContent = deeper && precise ? "On" : "Off"
+  }
+  updateCatalog()
   const rail = createScaleRail({
     element: $<SVGSVGElement>("#rail"),
     starsPerDecade: counts,
@@ -249,6 +277,25 @@ async function main() {
     },
   })
 
+  function refreshCatalog() {
+    updateCatalog()
+    rail.layout()
+    invalidate()
+    const url = new URL(location.href)
+    if (deeper) url.searchParams.set("preview", "deep")
+    else url.searchParams.delete("preview")
+    if (deeper && precise) url.searchParams.set("quality", "precise")
+    else url.searchParams.delete("quality")
+    history.replaceState(null, "", url)
+  }
+  toggle.onclick = () => {
+    deeper = !deeper
+    refreshCatalog()
+  }
+  quality.onclick = () => {
+    precise = !precise
+    refreshCatalog()
+  }
   $("#home").onclick = () => focus(catalog[0], false)
   const initial = catalog.find((object) => object.id === params.get("focus"))
   if (initial) focus(initial)
@@ -346,6 +393,12 @@ function positionOf(data: StarData, index: number) {
 const starName = (index: number) => (index === 0 ? "sun" : `star #${index}`)
 
 function describeStar(data: StarData, hit: StarHit, dust: boolean) {
+  if (data.distances) {
+    const row = hit.index * 20,
+      info = data.distances
+    const distance = (offset: number) => (info.getFloat32(row + offset, true) / 1000).toFixed(2)
+    return `<b>Gaia DR3 ${info.getBigUint64(row, true)}</b> · ${distance(12)} kpc from Sun · 16–84% interval ${distance(8)}–${distance(16)} kpc`
+  }
   if (hit.tileId?.startsWith("lmc/")) return `<b>OGLE-III LMC field</b> · V ≈ ${hit.apparentMag.toFixed(1)} from camera · adopted distance 49.59 kpc`
   const { kelvin, source } = displayTemperature(data, hit.index, dust)
   const extinction = extinctionOf(data, hit.index)

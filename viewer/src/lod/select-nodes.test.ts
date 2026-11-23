@@ -50,3 +50,18 @@ it("checks tile length, magic and row count and reconstructs relative positions"
   header.setUint32(8, 4, true)
   expect(() => decodeTile(bytes, root)).toThrow()
 })
+
+it("reads a deep tile's distance interval and keeps its 64-bit source ID exact", () => {
+  const bytes = new ArrayBuffer(47)
+  const header = new DataView(bytes)
+  header.setUint32(0, 0x47444931)
+  header.setUint32(4, 1, true)
+  header.setUint32(8, 1, true)
+  const source = 5823612345678901234n
+  header.setBigUint64(27, source, true)
+  ;[8000, 8250, 9000].forEach((pc, i) => header.setFloat32(35 + 4 * i, pc, true))
+  const { data } = decodeTile(bytes, { ...root, survey: "deep", count: 1 })
+  expect(data.distances!.getBigUint64(0, true)).toBe(source)
+  expect(data.distances!.getFloat32(12, true)).toBe(8250)
+  expect(() => decodeTile(bytes.slice(0, -1), { ...root, survey: "deep", count: 1 })).toThrow()
+})
