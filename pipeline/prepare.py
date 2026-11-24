@@ -92,6 +92,34 @@ def choose_distance(df: pd.DataFrame, min_snr: float) -> tuple[np.ndarray, np.nd
     return dist, src
 
 
+# Magellanic Clouds: galactic centre (l, b) in deg, search radius in deg, distance in pc
+# (LMC: Pietrzynski et al. 2019; SMC: Graczyk et al. 2020).
+CLOUDS = {"LMC": (280.47, -32.89, 8.0, 49590.0), "SMC": (302.80, -44.30, 4.0, 62440.0)}
+CLOUD_DEPTH_PC = 1000.0  # display spread along the line of sight, 1 sigma
+CLOUD_SOURCE = 4
+
+
+def place_cloud_members(df: pd.DataFrame, dist: np.ndarray, src: np.ndarray, min_snr: float) -> None:
+    """Move stars toward the Magellanic Clouds without a usable parallax to the Clouds' distance (source code 4).
+
+    Bailer-Jones distances assume every star belongs to the Milky Way, so such stars otherwise form a
+    streak toward the Clouds at 2-20 kpc. At G < 13 a parallax signal-to-noise below 5 means more than
+    roughly 10 kpc away, so nearby foreground stars keep their measured distances. Halo giants in the same
+    directions are moved too; proper motions would separate them but are not downloaded yet.
+    """
+    if "parallax" not in df or "parallax_error" not in df:
+        return
+    poor = ~(df["parallax"].to_numpy(float) / df["parallax_error"].to_numpy(float) >= min_snr)
+    l, b = np.radians(df["l"].to_numpy(float)), np.radians(df["b"].to_numpy(float))
+    rng = np.random.default_rng(1935)
+    for l0, b0, radius, d0 in CLOUDS.values():
+        l0, b0 = np.radians(l0), np.radians(b0)
+        cos_sep = np.sin(b) * np.sin(b0) + np.cos(b) * np.cos(b0) * np.cos(l - l0)
+        member = poor & (cos_sep >= np.cos(np.radians(radius)))
+        dist[member] = d0 + rng.normal(0.0, CLOUD_DEPTH_PC, member.sum())
+        src[member] = CLOUD_SOURCE
+
+
 def galactic_to_xyz(l_deg: np.ndarray, b_deg: np.ndarray, d_pc: np.ndarray) -> np.ndarray:
     """Heliocentric galactic Cartesian: x toward galactic centre, y toward l = 90 deg, z toward north galactic pole."""
     l, b = np.radians(l_deg), np.radians(b_deg)
@@ -152,7 +180,8 @@ def prepare_catalog(inputs, limit=0, min_snr=5.0, max_dist=20000.0):
     df = load(inputs)
     n_in = len(df)
     dist, src = choose_distance(df, min_snr)
-    keep = np.isfinite(dist) & (dist <= max_dist) & np.isfinite(df["phot_g_mean_mag"].to_numpy(float))
+    place_cloud_members(df, dist, src, min_snr)
+    keep = np.isfinite(dist) & ((dist <= max_dist) | (src == CLOUD_SOURCE)) & np.isfinite(df["phot_g_mean_mag"].to_numpy(float))
     keep &= np.isfinite(df["l"]) & np.isfinite(df["b"])
     df, dist, src = df[keep].reset_index(drop=True), dist[keep], src[keep]
     if limit and len(df) > limit:
@@ -182,7 +211,7 @@ def main() -> None:
     ap.add_argument("inputs", nargs="+", type=Path)
     ap.add_argument("--out", type=Path, default=Path("../viewer/public/data/stars.bin"))
     ap.add_argument("--min-snr", type=float, default=5.0, help="minimum parallax/error when falling back to 1/parallax")
-    ap.add_argument("--max-dist", type=float, default=20000.0, help="drop stars farther than this (pc)")
+    ap.add_argument("--max-dist", type=float, default=20000.0, help="drop stars farther than this (pc); stars placed in the Magellanic Clouds are kept")
     ap.add_argument("--limit", type=int, default=0, help="keep only the N brightest stars (apparent G); 0 keeps all")
     args = ap.parse_args()
 
@@ -198,6 +227,7 @@ def main() -> None:
             "bailer_jones_photogeo": int((src == 1).sum()),
             "bailer_jones_geo": int((src == 2).sum()),
             "inverse_parallax": int((src == 3).sum()),
+            "magellanic_cloud_distance": int((src == CLOUD_SOURCE).sum()),
         },
         "gspphot_coverage": None if astrophysics is None else {
             k: int(np.isfinite(v).sum()) for k, v in astrophysics.items()

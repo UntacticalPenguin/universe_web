@@ -1,6 +1,6 @@
 # Universe Map — starter (v0.5)
 
-**Working on this repo? Start with [AGENTS.md](AGENTS.md) and [NEXT_STEPS.md](NEXT_STEPS.md).** Current focus: exploration only; the idle game is paused. Next for the agent: Step 2a, light and colour.
+**Working on this repo? Start with [AGENTS.md](AGENTS.md) and [NEXT_STEPS.md](NEXT_STEPS.md).** Current focus: exploration only; the idle game is paused. Next for the agent: G1 in [NEXT_STEPS_GALAXY.md](NEXT_STEPS_GALAXY.md).
 
 A minimal, working first version: Gaia stars → binary file → 3D viewer in the browser.
 Everything later (octree, streaming, galaxies, nebulae) grows out of these two folders.

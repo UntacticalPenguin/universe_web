@@ -7,7 +7,7 @@ Brief for a coding agent (GitHub Copilot cloud agent or any other) working in th
 - Stop at each gate and report.
 - A human (the project owner, "Human") does everything marked **Human**: settings, secrets and all performance measurements.
 
-**Current checkpoint: Gate 3.** The octree builder is implemented. Check the tile build summary in the deployment run. Gate 2 visual and hardware measurements remain open. The next viewer task is Step 4a (tile selection).
+**Current checkpoint (24 Nov 2026): Steps 2–4 are implemented, except the node glow from Step 4c. Continue with [`NEXT_STEPS_GALAXY.md`](NEXT_STEPS_GALAXY.md), starting at G1; Step 5 below waits until G1–G3 are done.** Gate 2 hardware measurements remain open.
 
 ## 1. Context
 

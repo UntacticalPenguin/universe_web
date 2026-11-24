@@ -16,7 +16,19 @@ import astropy.units as u
 from build_octree import build_octree
 
 URL = "https://ftp.astrouw.edu.pl/ogle/ogle3/maps/lmc/maps/"
-DISTANCE = 49590.
+DISTANCE = 49590.   # pc, to the centre (Pietrzynski et al. 2019)
+CENTRE = (80.89, -69.756)   # RA, Dec in deg
+# The LMC is a disc tilted to the line of sight (van der Marel & Kallivayalil 2014): its north-east side is nearer.
+INCLINATION, NODES_PA = 26.2, 154.5   # deg; position angle of the line of nodes, from north through east
+THICKNESS_PC = 500.   # display spread along the line of sight, 1 sigma
+
+
+def disc_distance(ra, dec, d0=DISTANCE):
+    """Distance (pc) to the inclined disc plane along each line of sight (van der Marel & Cioni 2001, eq. 8)."""
+    centre, points = SkyCoord(*CENTRE, unit="deg"), SkyCoord(ra, dec, unit="deg")
+    rho, phi = centre.separation(points).rad, centre.position_angle(points).rad
+    i, theta = np.radians(INCLINATION), np.radians(NODES_PA)
+    return d0 * np.cos(i) / (np.cos(i) * np.cos(rho) - np.sin(i) * np.sin(rho) * np.sin(phi - theta))
 
 
 def coordinates(values, hours=False):
@@ -82,13 +94,14 @@ def main():
     if seen < args.limit:
         raise ValueError(f"Only {seen} usable OGLE sources")
     ra, dec, vmag, vi = result.T
-    gal = SkyCoord(ra=ra*u.deg,dec=dec*u.deg).galactic.cartesian.xyz.value.T * DISTANCE
-    center = np.array(SkyCoord(ra=80.89*u.deg,dec=-69.756*u.deg).galactic.cartesian.xyz.value)*DISTANCE
+    distance = disc_distance(ra, dec) + rng.normal(0., THICKNESS_PC, len(ra))
+    gal = SkyCoord(ra=ra*u.deg,dec=dec*u.deg).galactic.cartesian.xyz.value.T * distance[:, None]
+    center = np.array(SkyCoord(ra=CENTRE[0]*u.deg,dec=CENTRE[1]*u.deg).galactic.cartesian.xyz.value)*DISTANCE
     # STN1 colour is a display proxy here. The original passbands are Johnson V and Cousins I.
-    build_octree(args.out,gal-center,vmag-5*np.log10(DISTANCE/10),vi,capacity=32768)
+    build_octree(args.out,gal-center,vmag-5*np.log10(distance/10),vi,capacity=32768)
     manifest = args.out / "hierarchy.json"
     tree=json.loads(manifest.read_text())
-    tree.update(origin=center.tolist(),survey="OGLE-III LMC",subfieldsRead=len(names),eligibleSources=seen,sampling="uniform reservoir over eligible sources",distancePc=DISTANCE,photometry="V, V-I")
+    tree.update(origin=center.tolist(),survey="OGLE-III LMC",subfieldsRead=len(names),eligibleSources=seen,sampling="uniform reservoir over eligible sources",distancePc=DISTANCE,geometry=f"inclined disc, i = {INCLINATION} deg, line of nodes {NODES_PA} deg, sigma {THICKNESS_PC:g} pc",photometry="V, V-I")
     manifest.write_text(json.dumps(tree))
     print(f"Wrote {size:,} OGLE-III LMC-field entries in {len(tree['nodes'])} tiles",flush=True)
 

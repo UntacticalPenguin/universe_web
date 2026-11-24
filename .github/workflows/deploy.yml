@@ -121,6 +121,8 @@ jobs:
           path: viewer/public/tiles/lmc
           key: ogle-lmc-6m-${{ hashFiles('pipeline/build_lmc.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
       - name: Build six million OGLE-III LMC-field entries
+        # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
+        continue-on-error: true
         if: steps.ogle-cache.outputs.cache-hit != 'true'
         working-directory: pipeline
         run: python build_lmc.py --out ../viewer/public/tiles/lmc
@@ -134,6 +136,8 @@ jobs:
             viewer/public/tiles/deep-wide
           key: deep-gaia-v1-${{ hashFiles('pipeline/build_deep_gaia.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
       - name: Build deeper Gaia preview
+        # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
+        continue-on-error: true
         if: steps.deep-cache.outputs.cache-hit != 'true'
         working-directory: pipeline
         run: python build_deep_gaia.py --out ../viewer/public/tiles
@@ -145,6 +149,8 @@ jobs:
           path: viewer/public/tiles/luminous
           key: luminous-gaia-v1-${{ hashFiles('pipeline/build_luminous.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
       - name: Select luminous Gaia sources across the full distance catalog
+        # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
+        continue-on-error: true
         if: steps.luminous-cache.outputs.cache-hit != 'true'
         working-directory: pipeline
         run: python build_luminous.py --out ../viewer/public/tiles/luminous

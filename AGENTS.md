@@ -1,6 +1,6 @@
 # Instructions for coding agents
 
-Read `NEXT_STEPS.md` first: it holds the task list, the specs and the gates. Do one step, or one sub-step where a step is split, per session and per pull request. Then stop and report.
+Read `NEXT_STEPS.md` first, then `NEXT_STEPS_GALAXY.md` (the current tasks): they hold the task list, the specs and the gates. Do one step, or one sub-step where a step is split, per session and per pull request. Then stop and report.
 
 ## Scope
 
