@@ -1,5 +1,6 @@
 """Build an OGLE-III LMC-field octree. Positions use observed sky directions and a common host distance."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import bz2
 import io
 import json
@@ -58,17 +59,28 @@ def main():
     args.cache.mkdir(parents=True,exist_ok=True)
     rng = np.random.default_rng(1935)
     names = [f"lmc{field}.{chip}.map.bz2" for field in range(100,216) for chip in range(1,9)]
-    result = np.empty((args.limit,4))
-    size = 0
-    for name in rng.permutation(names):
-        field = load_field(name,args.cache)
-        take = min(len(field),args.limit-size)
-        result[size:size+take] = field if take == len(field) else field[rng.choice(len(field), take, replace=False)]
-        size += take
-        if size == args.limit:
-            break
-    if size != args.limit:
-        raise ValueError(f"Only {size} usable OGLE sources")
+    # A uniform reservoir of the first N sources, updated one subfield at a time.
+    # Hypergeometric sampling gives every eligible row the same inclusion probability.
+    result = np.empty((args.limit, 4))
+    seen = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for start in range(0, len(names), 8):
+            fields = pool.map(lambda name: load_field(name, args.cache), names[start:start+8])
+            for field in fields:
+                old = min(seen, args.limit)
+                seen += len(field)
+                size = min(seen, args.limit)
+                if not len(field):
+                    continue
+                take = (len(field) if seen <= args.limit else
+                        rng.hypergeometric(len(field), seen - len(field), size))
+                append = size - old
+                slots = rng.choice(old, take - append, replace=False)
+                rows = rng.choice(len(field), take, replace=False)
+                result[slots] = field[rows[:take-append]]
+                result[old:size] = field[rows[take-append:]]
+    if seen < args.limit:
+        raise ValueError(f"Only {seen} usable OGLE sources")
     ra, dec, vmag, vi = result.T
     gal = SkyCoord(ra=ra*u.deg,dec=dec*u.deg).galactic.cartesian.xyz.value.T * DISTANCE
     center = np.array(SkyCoord(ra=80.89*u.deg,dec=-69.756*u.deg).galactic.cartesian.xyz.value)*DISTANCE
@@ -76,7 +88,7 @@ def main():
     build_octree(args.out,gal-center,vmag-5*np.log10(DISTANCE/10),vi,capacity=32768)
     manifest = args.out / "hierarchy.json"
     tree=json.loads(manifest.read_text())
-    tree.update(origin=center.tolist(),survey="OGLE-III LMC",distancePc=DISTANCE,photometry="V, V-I")
+    tree.update(origin=center.tolist(),survey="OGLE-III LMC",subfieldsRead=len(names),eligibleSources=seen,sampling="uniform reservoir over eligible sources",distancePc=DISTANCE,photometry="V, V-I")
     manifest.write_text(json.dumps(tree))
     print(f"Wrote {size:,} OGLE-III LMC-field entries in {len(tree['nodes'])} tiles",flush=True)
 
