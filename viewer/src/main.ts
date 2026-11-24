@@ -232,14 +232,18 @@ async function main() {
   const allRoots = tree?.roots.slice() ?? []
   const available = allRoots.includes("deep/r") && allRoots.includes("deep-wide/r")
   let deeper = available && params.get("preview") === "deep"
+  const hasLuminous = allRoots.includes("luminous/r")
+  let luminous = hasLuminous && params.get("preview") === "luminous"
+  const luminousToggle = $<HTMLButtonElement>("#luminous-toggle")
+  $("#luminous-row").hidden = !hasLuminous
   let precise = params.get("quality") === "precise"
   const toggle = $<HTMLButtonElement>("#deep-toggle"),
     quality = $<HTMLButtonElement>("#quality-toggle")
   $("#deep-controls").hidden = !available
   function updateCatalog() {
     if (!tree) return
-    const activeSurveys = new Set(["stars", "lmc"])
-    if (deeper) {
+    const activeSurveys = new Set([luminous ? "luminous" : "stars", "lmc"])
+    if (deeper && !luminous) {
       activeSurveys.add("deep")
       if (!precise) activeSurveys.add("deep-wide")
     }
@@ -259,6 +263,9 @@ async function main() {
       }
     const extra = tree.roots.filter((id) => tree.nodes[id].survey.startsWith("deep")).reduce((n, id) => n + tree.nodes[id].subtreeCount, 0)
     $("#deep-count").textContent = deeper ? extra.toLocaleString("en-US") + " additional Gaia sources" : "Bright catalog"
+    if (luminous) $("#deep-count").textContent = tree.nodes["luminous/r"].subtreeCount.toLocaleString("en-US") + " luminous Gaia sources"
+    luminousToggle.setAttribute("aria-pressed", String(luminous))
+    luminousToggle.textContent = luminous ? "On" : "Off"
     toggle.setAttribute("aria-pressed", String(deeper))
     toggle.textContent = deeper ? "On" : "Off"
     quality.disabled = !deeper
@@ -282,13 +289,20 @@ async function main() {
     rail.layout()
     invalidate()
     const url = new URL(location.href)
-    if (deeper) url.searchParams.set("preview", "deep")
+    if (luminous) url.searchParams.set("preview", "luminous")
+    else if (deeper) url.searchParams.set("preview", "deep")
     else url.searchParams.delete("preview")
     if (deeper && precise) url.searchParams.set("quality", "precise")
     else url.searchParams.delete("quality")
     history.replaceState(null, "", url)
   }
+  luminousToggle.onclick = () => {
+    luminous = !luminous
+    deeper = false
+    refreshCatalog()
+  }
   toggle.onclick = () => {
+    luminous = false
     deeper = !deeper
     refreshCatalog()
   }

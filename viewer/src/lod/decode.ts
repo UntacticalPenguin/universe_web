@@ -1,7 +1,7 @@
 import type { StarData } from "../stars/load-stars.ts"
 import type { Tile } from "./hierarchy.ts"
 export function decodeTile(buffer: ArrayBuffer, tile: Tile) {
-  const deep = tile.survey === "deep" || tile.survey === "deep-wide"
+  const deep = tile.survey === "deep" || tile.survey === "deep-wide" || tile.survey === "luminous"
   if (buffer.byteLength !== 16 + (deep ? 31 : 11) * tile.count) throw Error("Incorrect STN1 length")
   const header = new DataView(buffer)
   if (header.getUint32(0) !== (deep ? 0x47444931 : 0x53544e31) || header.getUint32(4, true) !== 1 || header.getUint32(8, true) !== tile.count)
