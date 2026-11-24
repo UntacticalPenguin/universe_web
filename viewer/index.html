@@ -458,6 +458,9 @@
       <details id="settings" open>
         <summary id="drawer-toggle"><span class="show-label">Show settings</span><span class="hide-label">Hide settings</span></summary>
         <div id="controls-body">
+          <div id="luminous-row" hidden>
+            <div class="switch-row"><span>Luminous stars only</span><button id="luminous-toggle" aria-pressed="false">Off</button></div>
+          </div>
           <section id="deep-controls" hidden>
             <h2>Gaia preview</h2>
             <div class="switch-row"><span>Fainter stars</span><button id="deep-toggle" aria-pressed="false">Off</button></div>
@@ -472,6 +475,10 @@
           <p class="hint" id="tile-status" aria-label="Catalog streaming status"></p>
           <details>
             <summary>Catalog notes</summary>
+            <p>
+              Luminous stars only selects Gaia sources across the sky with observed absolute G ≤ −2, median distance ≤ 30 kpc and relative distance interval
+              half-width ≤ 20%. Interstellar dust dims their measured light. Hover a star for its source ID and distance interval.
+            </p>
             <p>
               The preview adds an all-sky random sample with Gaia G between 13 and 17. Hover a preview star for its Gaia ID and Bailer-Jones distance interval.
               The filter applies to added stars and uses half the 16th–84th percentile range divided by the median. Sampled point density depends on survey
