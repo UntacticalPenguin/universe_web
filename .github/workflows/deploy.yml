@@ -148,12 +148,19 @@ jobs:
         with:
           path: viewer/public/tiles/luminous
           key: luminous-gaia-v1-${{ hashFiles('pipeline/build_luminous.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
+          # Fall back to the last good selection when the archive is down (closed 25 Nov - 2 Dec 2026).
+          restore-keys: luminous-gaia-v1-
       - name: Select luminous Gaia sources across the full distance catalog
         # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
         continue-on-error: true
         if: steps.luminous-cache.outputs.cache-hit != 'true'
         working-directory: pipeline
-        run: python build_luminous.py --out ../viewer/public/tiles/luminous
+        run: |
+          if [ -f ../viewer/public/tiles/luminous/hierarchy.json ] && ! curl -sf -m 20 -o /dev/null https://gea.esac.esa.int/tap-server/tap/availability; then
+            echo "Archive unreachable; keeping the restored luminous layer."; exit 0
+          fi
+          python build_luminous.py --out ../viewer/public/tiles/luminous.new
+          rm -rf ../viewer/public/tiles/luminous && mv ../viewer/public/tiles/luminous.new ../viewer/public/tiles/luminous
 
       - uses: actions/setup-node@v4
         with:

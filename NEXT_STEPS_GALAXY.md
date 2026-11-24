@@ -114,7 +114,8 @@ The Gaia archive reopens with DR4 on 2 Dec 2026. Before any code:
    - bump `RAW_RELEASE` to `gaia-dr4-raw-v1`.
    - If DR4 has no distance table yet, stay on DR3 for distances and only take proper motions and photometry from DR4.
 3. Extend `place_cloud_members` with a proper-motion test. Members move like their Cloud. Take the Clouds' mean proper motions from the Gaia Collaboration paper on the Magellanic Clouds (Luri et al. 2021, A&A 649, A7); do not invent them.
-4. Slices to G < 15: roughly 5× today's stars (an extrapolation from the current slices; check with `--count`). Add the slices one at a time and watch the octree build time and the Pages size limit (1 GB). Beyond that, tiles move to Cloudflare R2 (not yet).
+4. `build_luminous.py` sends anonymous jobs, which the archive has capped at 1 minute since October 2026; on 24 Nov every job was aborted. Log in with `GAIA_USER` / `GAIA_PASSWORD` the way `fetch_gaia.py` does. Until then the deploy reuses the last cached luminous layer.
+5. Slices to G < 15: roughly 5× today's stars (an extrapolation from the current slices; check with `--count`). Add the slices one at a time and watch the octree build time and the Pages size limit (1 GB). Beyond that, tiles move to Cloudflare R2 (not yet).
 
 ## 7. G5: replace OGLE with Gaia's own Cloud stars (after G4)
 
