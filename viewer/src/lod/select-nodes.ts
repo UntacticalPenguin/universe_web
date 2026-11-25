@@ -7,6 +7,7 @@ export function selectNodes(tree: Hierarchy, camera: THREE.PerspectiveCamera, he
   const queue: { id: string; pixels: number }[] = []
   const draw: string[] = [],
     request: string[] = []
+  const frontier: string[] = []
   let points = 0
   function candidate(id: string) {
     const n = tree.nodes[id],
@@ -49,18 +50,25 @@ export function selectNodes(tree: Hierarchy, camera: THREE.PerspectiveCamera, he
   while (queue.length) {
     const { id, pixels } = pop(),
       n = tree.nodes[id]
-    if (points + n.count > budget) continue
+    if (points + n.count > budget) {
+      frontier.push(id)
+      continue
+    }
     points += n.count
     if (!loaded(id)) {
+      frontier.push(id)
       request.push(id)
       continue
     }
     draw.push(id)
-    if (pixels <= 300) continue
+    if (pixels <= 300) {
+      frontier.push(id)
+      continue
+    }
     for (const child of n.children) {
       const next = candidate(child)
       if (next) push(next)
     }
   }
-  return { draw, request }
+  return { draw, request, frontier }
 }
