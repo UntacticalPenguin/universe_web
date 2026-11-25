@@ -19,6 +19,7 @@ import { createToneMap } from "./render/tone-map.ts"
 import { createLuminanceMeter } from "./render/auto-exposure.ts"
 import { targetExposure, updateExposure } from "./render/light.ts"
 import { loadHierarchy } from "./lod/hierarchy"
+import { loadModel } from "./lod/model-layer"
 import { createStream } from "./lod/stream"
 import { catalog, diskOutline, type Landmark } from "./view/catalog"
 import { createFlight } from "./view/flight.ts"
@@ -87,10 +88,13 @@ async function main() {
   let previousTime = performance.now()
   let isDirty = true
   let lastChange = performance.now()
+  let model: Awaited<ReturnType<typeof loadModel>>
+  let modelEnabled = true
   const invalidate = () => {
     needsMeter = true
     isDirty = true
     lastChange = performance.now()
+    model?.clear()
     screenIndex.clear()
     pointer.refresh()
   }
@@ -147,7 +151,7 @@ async function main() {
   const pointer = createPointer({
     layer: $("#cursor"),
     surface: renderer.domElement,
-    pick: (x, y, range) => screenIndex.nearest(x, y, range),
+    pick: (x, y, range) => screenIndex.nearest(x, y, range) ?? model?.nearest(x, y),
     describe: (hit) => describeStar(hit.data ?? data!, hit, dust),
     onSelect: (hit) => {
       orbit.stop()
@@ -311,6 +315,21 @@ async function main() {
     refreshCatalog()
   }
   $("#home").onclick = () => focus(catalog[0], false)
+  const modelButton = $("#model-toggle")
+  modelButton.onclick = () => {
+    modelEnabled = !modelEnabled
+    modelButton.setAttribute("aria-pressed", String(modelEnabled))
+    modelButton.textContent = modelEnabled ? "On" : "Off"
+    invalidate()
+  }
+  if (tree)
+    loadModel(import.meta.env.BASE_URL, scene, indexOptions, invalidate)
+      .then((layer) => {
+        model = layer
+        $("#model-row").hidden = !layer
+        invalidate()
+      })
+      .catch((error) => console.warn("Milky Way model unavailable", error))
   const initial = catalog.find((object) => object.id === params.get("focus"))
   if (initial) focus(initial)
   const tileStatus = $("#tile-status")
@@ -351,6 +370,7 @@ async function main() {
         fading = state.fading
         tileStatus.textContent = `Octree · ${state.nodes} tiles · ${state.points.toLocaleString("en-US")} points · ${state.pending} loading`
       }
+      $("#model-status").hidden = !model?.update(modelEnabled, canvas.height)
       renderer.setRenderTarget(hdr)
       renderer.render(scene, camera)
       if (automatic && drawNumber - lastMeterDraw >= 4) {
@@ -377,6 +397,7 @@ async function main() {
       rail.setDistance(flight.distance())
     } else if (!screenIndex.isReady() && now - lastChange > SETTLE_MS) {
       visible = screenIndex.rebuild()
+      model?.rebuild()
       pointer.refresh()
     }
     if (now - secondStartedAt >= 1000) {
@@ -409,6 +430,7 @@ function positionOf(data: StarData, index: number) {
 const starName = (index: number) => (index === 0 ? "sun" : `star #${index}`)
 
 function describeStar(data: StarData, hit: StarHit, dust: boolean) {
+  if (hit.tileId === "model") return "Milky Way model (Bland-Hawthorn &amp; Gerhard 2016; arms: Reid et al. 2019), not observed stars"
   if (data.distances) {
     const row = hit.index * 20,
       info = data.distances

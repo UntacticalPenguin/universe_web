@@ -458,6 +458,9 @@
       <details id="settings" open>
         <summary id="drawer-toggle"><span class="show-label">Show settings</span><span class="hide-label">Hide settings</span></summary>
         <div id="controls-body">
+          <div id="model-row" hidden>
+            <div class="switch-row"><span>Milky Way model</span><button id="model-toggle" aria-pressed="true">On</button></div>
+          </div>
           <div id="luminous-row" hidden>
             <div class="switch-row"><span>Luminous stars only</span><button id="luminous-toggle" aria-pressed="false">Off</button></div>
           </div>
@@ -522,7 +525,7 @@
       <button id="home" type="button" title="Center the camera on the Sun at the current orbit distance">☉ Center Sun</button>
     </aside>
     <footer id="tray">
-      <span class="zone"><span class="brand">universe map</span></span>
+      <span class="zone"><span class="brand">universe map</span> <span id="model-status" hidden>model</span></span>
       <span class="zone">
         <span data-field="target"><abbr title="orbit target">◎</abbr><b>sun</b></span>
         <span data-field="distance"><abbr title="camera distance to the target">↔</abbr><b>—</b></span>
