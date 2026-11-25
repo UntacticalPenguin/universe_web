@@ -168,6 +168,26 @@ jobs:
           python build_luminous.py --out ../viewer/public/tiles/luminous.new
           rm -rf ../viewer/public/tiles/luminous && mv ../viewer/public/tiles/luminous.new ../viewer/public/tiles/luminous
 
+      # Set the source table after checking the released schema and the Pages budget.
+      - name: Restore validated Gaia Cloud tiles
+        if: vars.GAIA_CLOUD_TABLE != ''
+        id: clouds-cache
+        uses: actions/cache@v4
+        with:
+          path: viewer/public/tiles/clouds
+          key: clouds-${{ vars.GAIA_CLOUD_TABLE }}-${{ hashFiles('pipeline/build_clouds.py', 'pipeline/build_lmc.py', 'pipeline/build_octree.py') }}
+      - name: Build complete Gaia Magellanic cones
+        if: vars.GAIA_CLOUD_TABLE != '' && steps.clouds-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        working-directory: pipeline
+        env:
+          GAIA_CLOUD_TABLE: ${{ vars.GAIA_CLOUD_TABLE }}
+          GAIA_USER: ${{ secrets.GAIA_USER }}
+          GAIA_PASSWORD: ${{ secrets.GAIA_PASSWORD }}
+        run: |
+          python build_clouds.py --table "$GAIA_CLOUD_TABLE" --out "$RUNNER_TEMP/gaia-clouds"
+          mv "$RUNNER_TEMP/gaia-clouds" ../viewer/public/tiles/clouds
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20

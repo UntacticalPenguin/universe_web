@@ -11,7 +11,11 @@ import { createGlowLayer, unresolvedLight } from "./glow-layer"
 type Options = Omit<Parameters<typeof createScreenIndex>[0], "data">
 export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Options, pixelRatio: number, budget: number, changed: () => void, debug: boolean) {
   const glow = createGlowLayer(tree, scene)
-  const lmcCentre = new THREE.Vector3(...(tree.nodes["lmc/r"]?.center ?? [0, 0, 0]))
+  const cloudCentres = new Map<string, THREE.Vector3>()
+  for (const survey of ["lmc", "clouds/lmc", "clouds/smc"]) {
+    const root = tree.nodes[survey + "/r"]
+    if (root) cloudCentres.set(survey, new THREE.Vector3(...root.center))
+  }
   let firstDraw = new Map<string, number>()
   function entry(id: string, tile: ReturnType<typeof decodeTile>) {
     const node = tree.nodes[id],
@@ -41,7 +45,9 @@ export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Optio
   function update() {
     const { camera } = options
     camera.updateMatrixWorld()
-    const lmcWeight = 1 - THREE.MathUtils.smoothstep(camera.position.distanceTo(lmcCentre), 15000, 40000)
+    const cloudWeights = new Map<string, number>()
+    for (const [survey, centre] of cloudCentres) cloudWeights.set(survey, 1 - THREE.MathUtils.smoothstep(camera.position.distanceTo(centre), 15000, 40000))
+    const detailWeight = (id: string) => cloudWeights.get(tree.nodes[id].survey) ?? 1
     const selection = selectNodes(
       tree,
       camera,
@@ -49,7 +55,7 @@ export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Optio
       options.magLimit() + (options.dust() ? 0 : 8),
       budget,
       (id) => cache.has(id),
-      (id) => id !== "lmc/r" || lmcWeight > 0,
+      (id) => detailWeight(id) > 0,
     )
     for (const id of drawn) {
       const item = cache.get(id)!
@@ -75,7 +81,7 @@ export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Optio
       const weight = Math.min(1, (now - start) / 250)
       const inherited = weights.get(id) ?? 1
       const contribution = inherited * weight
-      const detail = node.survey === "lmc" ? lmcWeight : 1
+      const detail = detailWeight(id)
       layer.setWeight(contribution * detail)
       fading ||= weight < 1
       const childLight = node.children.reduce((sum, id) => sum + tree.nodes[id][key], 0)
@@ -120,11 +126,13 @@ export function createStream(tree: Hierarchy, scene: THREE.Scene, options: Optio
     firstDraw = nextFirstDraw
     for (const id of frontier) {
       const node = tree.nodes[id]
-      glow.add(node, node[key] * (node.survey === "lmc" ? lmcWeight : 1), camera, options.dust())
+      glow.add(node, node[key] * detailWeight(id), camera, options.dust())
     }
-    const lmc = tree.nodes["lmc/r"]
-    if (lmc && tree.roots.includes("lmc/r") && (drawSet.has("lmc/r") || frontier.has("lmc/r")))
-      glow.add(lmc, lmc[key] * (1 - lmcWeight), camera, options.dust())
+    for (const [survey, detail] of cloudWeights) {
+      const id = survey + "/r",
+        root = tree.nodes[id]
+      if (drawSet.has(id) || frontier.has(id)) glow.add(root, root[key] * (1 - detail), camera, options.dust())
+    }
     glow.finish((options.viewport().height * pixelRatio * camera.projectionMatrix.elements[5]) / 2)
     loader.update(selection.request)
     return { fading, nodes: drawn.length, points: drawn.reduce((n, id) => n + tree.nodes[id].count, 0), pending: loader.active() }
