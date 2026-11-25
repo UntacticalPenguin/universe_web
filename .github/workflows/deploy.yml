@@ -105,6 +105,7 @@ jobs:
             python prepare.py data/raw/*.parquet --limit 1000000
             if [ -f build_octree.py ]; then
               python build_octree.py data/raw/*.parquet --limit 6000000 --out ../viewer/public/tiles/stars
+              python build_model.py --stars ../viewer/public/tiles/stars/hierarchy.json --out ../viewer/public/tiles/model
             fi
             {
               echo "## Star files"
