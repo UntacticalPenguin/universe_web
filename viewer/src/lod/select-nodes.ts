@@ -1,7 +1,15 @@
 import * as THREE from "three"
 import type { Hierarchy } from "./hierarchy.ts"
 
-export function selectNodes(tree: Hierarchy, camera: THREE.PerspectiveCamera, height: number, limit: number, budget: number, loaded: (id: string) => boolean) {
+export function selectNodes(
+  tree: Hierarchy,
+  camera: THREE.PerspectiveCamera,
+  height: number,
+  limit: number,
+  budget: number,
+  loaded: (id: string) => boolean,
+  detail = (_id: string) => true,
+) {
   const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse))
   const focal = (height * camera.projectionMatrix.elements[5]) / 2
   const queue: { id: string; pixels: number }[] = []
@@ -45,7 +53,8 @@ export function selectNodes(tree: Hierarchy, camera: THREE.PerspectiveCamera, he
   }
   for (const root of tree.roots) {
     const c = candidate(root)
-    if (c) push(c)
+    if (c && detail(root)) push(c)
+    else if (c) frontier.push(root)
   }
   while (queue.length) {
     const { id, pixels } = pop(),
