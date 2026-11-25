@@ -246,7 +246,8 @@ async function main() {
   $("#deep-controls").hidden = !available
   function updateCatalog() {
     if (!tree) return
-    const activeSurveys = new Set([luminous ? "luminous" : "stars", "lmc"])
+    const clouds = allRoots.includes("clouds/lmc/r") && allRoots.includes("clouds/smc/r")
+    const activeSurveys = new Set([luminous ? "luminous" : "stars", ...(clouds ? ["clouds/lmc", "clouds/smc"] : ["lmc"])])
     if (deeper && !luminous) {
       activeSurveys.add("deep")
       if (!precise) activeSurveys.add("deep-wide")
@@ -437,6 +438,7 @@ function describeStar(data: StarData, hit: StarHit, dust: boolean) {
     const distance = (offset: number) => (info.getFloat32(row + offset, true) / 1000).toFixed(2)
     return `<b>Gaia DR3 ${info.getBigUint64(row, true)}</b> · ${distance(12)} kpc from Sun · 16–84% interval ${distance(8)}–${distance(16)} kpc`
   }
+  if (hit.tileId?.startsWith("clouds/")) return `Gaia ${hit.tileId.split("/")[1].toUpperCase()} member candidate · Gaia G, BP−RP · model host-plane distance`
   if (hit.tileId?.startsWith("lmc/"))
     return `<b>OGLE-III LMC field</b> · V ≈ ${hit.apparentMag.toFixed(1)} from camera · colour: OGLE V − I · disc model, 49.59 kpc at the centre`
   const { kelvin, source } = displayTemperature(data, hit.index, dust)
