@@ -1,6 +1,8 @@
 """Build BCN1 beacon tiles from four independently cached published catalogues."""
 import argparse
+import gzip
 import hashlib
+from contextlib import ExitStack
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -83,6 +85,18 @@ RR_COLUMNS = {
 }
 
 
+def read_rr_file(path):
+    """Unwrap file and transport gzip layers before parsing CDS byte columns."""
+    with ExitStack() as stack:
+        stream = stack.enter_context(path.open("rb"))
+        while stream.read(2) == b"\x1f\x8b":
+            stream.seek(0)
+            stream = stack.enter_context(gzip.GzipFile(fileobj=stream, mode="rb"))
+        stream.seek(0)
+        return pd.read_fwf(stream, names=list(RR_COLUMNS), compression=None,
+                           colspecs=[(lo-1,hi) for _,lo,hi in RR_COLUMNS.values()])
+
+
 def rr_table():
     """Read the complete CDS distribution, falling back to its VizieR table service."""
     from urllib.request import urlretrieve
@@ -91,9 +105,8 @@ def rr_table():
         path = Path(tmp)/"vrrlyr.dat.gz"
         try:
             urlretrieve("https://vizier.cfa.harvard.edu/ftp/cats/I/358/vrrlyr.dat.gz", path)
-            frame = pd.read_fwf(path, names=list(RR_COLUMNS),
-                                colspecs=[(lo-1,hi) for _,lo,hi in RR_COLUMNS.values()])
-        except (OSError, EOFError) as error:
+            frame = read_rr_file(path)
+        except (OSError, EOFError, UnicodeError) as error:
             print(f"Retrying RR Lyrae via VizieR: {error}", flush=True)
             client = Vizier(columns=list(RR_COLUMNS), row_limit=-1, timeout=300,
                             vizier_server="vizier.cfa.harvard.edu")
