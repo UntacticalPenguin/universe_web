@@ -57,3 +57,19 @@ def test_readers_and_tiles(tmp_path):
     build(cache,tmp_path/"partial")
     counts=json.loads((tmp_path/"partial/hierarchy.json").read_text())["catalogues"]
     assert counts["rrlyrae"]["status"]=="unavailable" and counts["rrlyrae"]["dropped"] is None
+
+
+def test_rr_file_transport_compression(tmp_path):
+    import gzip
+    from build_beacons import RR_COLUMNS, read_rr_file
+    row=bytearray(b" "*882)
+    for (key,(_,lo,hi)),value in zip(RR_COLUMNS.items(),[123,13,.01,14,13,-1.5,.1,.2,.03,180,-30]):
+        row[lo-1:hi]=str(value).rjust(hi-lo+1).encode()
+    content=bytes(row)+b"\n"
+    for layers in range(3):
+        path=tmp_path/"vrrlyr.dat.gz"
+        path.write_bytes(content)
+        frame=read_rr_file(path)
+        assert frame.Source.tolist()==[123] and frame["[M/H]"].tolist()==[-1.5]
+        assert read_rrlyrae(frame).distance[0]>0
+        content=gzip.compress(content)
