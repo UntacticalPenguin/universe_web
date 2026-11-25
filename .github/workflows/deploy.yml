@@ -147,26 +147,29 @@ jobs:
 
       - name: Restore full-sky luminous Gaia selection
         id: luminous-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: viewer/public/tiles/luminous
-          key: luminous-gaia-v1-${{ hashFiles('pipeline/build_luminous.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
-          # Fall back to the last good selection when the archive is down (closed 25 Nov - 2 Dec 2026).
+          key: luminous-gaia-v1-auth-${{ hashFiles('pipeline/build_luminous.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
           restore-keys: luminous-gaia-v1-
       - name: Select luminous Gaia sources across the full distance catalog
+        id: luminous-build
         env:
           GAIA_USER: ${{ secrets.GAIA_USER }}
           GAIA_PASSWORD: ${{ secrets.GAIA_PASSWORD }}
-        # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
         continue-on-error: true
         if: steps.luminous-cache.outputs.cache-hit != 'true'
         working-directory: pipeline
         run: |
-          if [ -f ../viewer/public/tiles/luminous/hierarchy.json ] && ! curl -sf -m 20 -o /dev/null https://gea.esac.esa.int/tap-server/tap/availability; then
-            echo "Archive unreachable; keeping the restored luminous layer."; exit 0
-          fi
-          python build_luminous.py --out ../viewer/public/tiles/luminous.new
-          rm -rf ../viewer/public/tiles/luminous && mv ../viewer/public/tiles/luminous.new ../viewer/public/tiles/luminous
+          python build_luminous.py --out "$RUNNER_TEMP/luminous"
+          rm -rf ../viewer/public/tiles/luminous
+          mv "$RUNNER_TEMP/luminous" ../viewer/public/tiles/luminous
+      - name: Cache completed luminous selection
+        if: steps.luminous-build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: viewer/public/tiles/luminous
+          key: ${{ steps.luminous-cache.outputs.cache-primary-key }}
 
       # Set the source table after checking the released schema and the Pages budget.
       - name: Restore validated Gaia Cloud tiles

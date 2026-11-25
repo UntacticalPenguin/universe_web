@@ -143,6 +143,13 @@ if __name__=="__main__":
     args=parser.parse_args()
     width=2**57
     ranges=[(i*width,(i+1)*width) for i in range(48)]
+    # During maintenance ESA may serve a branded HTML page with HTTP 200.
+    # Require a TAP/VOSI availability document before submitting any jobs.
+    with urlopen(ENDPOINT.rsplit("/",1)[0]+"/availability", timeout=25) as response:
+        availability = ET.fromstring(response.read())
+    if not any(el.tag.rsplit("}",1)[-1]=="available" and
+               (el.text or "").strip().lower() in ("true","1") for el in availability.iter()):
+        raise SystemExit("Gaia TAP is unavailable; retaining the previous luminous survey")
     archive = None
     if os.getenv("GAIA_USER") and os.getenv("GAIA_PASSWORD"):
         from astroquery.gaia import Gaia
