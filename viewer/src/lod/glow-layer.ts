@@ -13,7 +13,7 @@ export function createGlowLayer(tree: Hierarchy, scene: THREE.Scene) {
   const geometry = new THREE.InstancedBufferGeometry()
   geometry.index = quad.index
   geometry.setAttribute("position", quad.attributes.position)
-  const size = Object.keys(tree.nodes).length
+  const size = Object.keys(tree.nodes).length + 1
   const centers = new THREE.InstancedBufferAttribute(new Float32Array(size * 3), 3).setUsage(THREE.DynamicDrawUsage)
   const data = new THREE.InstancedBufferAttribute(new Float32Array(size * 3), 3).setUsage(THREE.DynamicDrawUsage)
   geometry.setAttribute("offsetPc", centers)

@@ -415,7 +415,8 @@ function describeStar(data: StarData, hit: StarHit, dust: boolean) {
     const distance = (offset: number) => (info.getFloat32(row + offset, true) / 1000).toFixed(2)
     return `<b>Gaia DR3 ${info.getBigUint64(row, true)}</b> · ${distance(12)} kpc from Sun · 16–84% interval ${distance(8)}–${distance(16)} kpc`
   }
-  if (hit.tileId?.startsWith("lmc/")) return `<b>OGLE-III LMC field</b> · V ≈ ${hit.apparentMag.toFixed(1)} from camera · disc model, 49.59 kpc at the centre`
+  if (hit.tileId?.startsWith("lmc/"))
+    return `<b>OGLE-III LMC field</b> · V ≈ ${hit.apparentMag.toFixed(1)} from camera · colour: OGLE V − I · disc model, 49.59 kpc at the centre`
   const { kelvin, source } = displayTemperature(data, hit.index, dust)
   const extinction = extinctionOf(data, hit.index)
   const reddening = reddeningOf(data, hit.index)
