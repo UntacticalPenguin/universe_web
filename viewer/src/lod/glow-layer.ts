@@ -1,3 +1,4 @@
+import { modelDust } from "./model-dust"
 import * as THREE from "three"
 import { createColourLut, temperatureOf } from "../stars/colour-lut"
 import { fluxOf, luminanceWeights } from "../render/light"
@@ -44,8 +45,14 @@ export function createGlowLayer(tree: Hierarchy, scene: THREE.Scene) {
   }
 }
 
-export function createGaussianMaterial() {
-  const uniforms = { focal: { value: 1 }, observer: { value: new THREE.Vector3() }, strength: { value: 1 }, lut: { value: createColourLut() } }
+export function createGaussianMaterial(forModel = false) {
+  const uniforms = {
+    dustScreen: { value: false },
+    focal: { value: 1 },
+    observer: { value: new THREE.Vector3() },
+    strength: { value: 1 },
+    lut: { value: createColourLut() },
+  }
   const material = new THREE.ShaderMaterial({
     uniforms,
     transparent: true,
@@ -55,6 +62,8 @@ export function createGaussianMaterial() {
     vertexShader: `
       attribute vec3 offsetPc, properties;
       uniform float focal, strength;
+      uniform bool dustScreen;
+      ${forModel ? modelDust : ""}
       uniform vec3 observer;
       uniform sampler2D lut;
       varying vec2 coord;
@@ -65,6 +74,7 @@ export function createGaussianMaterial() {
         float sigma = max(2., focal*properties.x*0.5/depth);
         coord = position.xy * 3.;
         float flux = strength*properties.y * ${fluxOf(4.83) * 100} / max(dot(view,view),1e-12);
+        ${forModel ? "if(dustScreen) flux*=modelTransmission(observer,offsetPc);" : ""}
         vec3 rgb = texture2D(lut,vec2((clamp(log(properties.z/2000.)/log(25.),0.,1.)*255.+0.5)/256.,0.5)).rgb;
         intensity = rgb / dot(rgb,vec3(${luminanceWeights.join(",")})) * flux / (6.2831853*sigma*sigma*(1.-exp(-4.5)));
         view.xy += coord*sigma*depth/focal;
