@@ -247,7 +247,9 @@ async function main() {
   function updateCatalog() {
     if (!tree) return
     const clouds = allRoots.includes("clouds/lmc/r") && allRoots.includes("clouds/smc/r")
-    const activeSurveys = new Set([luminous ? "luminous" : "stars", ...(clouds ? ["clouds/lmc", "clouds/smc"] : ["lmc"])])
+    // OGLE-III only covers 116 rectangular fields, so it is opt-in (?ogle=1) until the Gaia Cloud samples exist.
+    const ogle = params.get("ogle") === "1"
+    const activeSurveys = new Set([luminous ? "luminous" : "stars", ...(clouds ? ["clouds/lmc", "clouds/smc"] : ogle ? ["lmc"] : [])])
     if (deeper && !luminous) {
       activeSurveys.add("deep")
       if (!precise) activeSurveys.add("deep-wide")

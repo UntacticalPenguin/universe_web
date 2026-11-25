@@ -2,7 +2,9 @@
 
 Brief for a coding agent, after `NEXT_STEPS.md` Steps 1–4. Read `AGENTS.md` first; its rules apply (one sub-step per session and pull request, stop at each gate, never download Gaia data in an agent session, never report performance you did not measure).
 
-**Next for the agent: G1.** Steps 5 (sound, fan-out actions) in `NEXT_STEPS.md` wait until G1–G3 are done.
+**Status 25 Nov 2026:** G1–G3c and the code for G4 and G5 are merged. G5's data waits for the Human to set the repository variable `GAIA_CLOUD_TABLE` once DR4 is out (2 Dec). Until then the OGLE layer is off by default (`?ogle=1` shows it).
+
+**Next for the agent: Beacons** (section 8). Steps 5 (sound, fan-out actions) in `NEXT_STEPS.md` wait until Beacons is done.
 
 ## 1. What the Human sees, and why (measured 24 Nov 2026)
 
@@ -124,7 +126,37 @@ The Gaia archive reopens with DR4 on 2 Dec 2026. Before any code:
   - Write a `clouds` survey.
 - This removes the rectangles and puts the Clouds in the same colour system as everything else. Then drop the `lmc` survey from the default set, or keep it as an option.
 
-## 8. Not doing (and why)
+## 8. Beacons: real tracers across the whole galaxy (pipeline + viewer)
+
+**Why.** Gaia sees a bubble of about 3 kpc around the Sun because it observes in visible light and dust blocks it (section 1). More Gaia stars do not change that: all of Gaia (G < 21, 1.8 billion stars, about 31 GB at 17 B/star) still ends in dust after a few kpc. The model (G3) shows the shape, but it is not data. Beacons are sparse real objects whose distances come from physics or radio parallaxes, not from Gaia parallaxes, and which reach across the galaxy. They let the Human see where the real galaxy is, and check the model's arms against them.
+
+**Catalogues.** Download in `deploy.yml` only (the agent's firewall blocks them), cache each like the other layers, and use `continue-on-error`. Check every file name and column against the catalogue's ReadMe before relying on it; the notes below say what is confirmed.
+
+| Beacon | Count | Source and download | Distance | Traces |
+| --- | --- | --- | --- | --- |
+| Classical Cepheids | about 2,400 (count from the paper's abstract; check the ReadMe) | Skowron et al. 2019, Science 365, 478. VizieR `J/other/Sci/365.478`, file `tables1.dat` (confirmed in the CDS listing), at `https://cdsarc.cds.unistra.fr/ftp/J/other/Sci/365.478/` | in the table, from mid-infrared period–luminosity relations | young disc, spiral arms and the warp, out to about 20 kpc |
+| Masers in high-mass star-forming regions | about 200 | Reid et al. 2019, ApJ 885, 131. VizieR `J/ApJ/885/131` (confirmed), at `https://cdsarc.cds.unistra.fr/ftp/J/ApJ/885/131/` | 1 / parallax from radio interferometry (VLBI), which dust does not affect | spiral arms, including the far side; these are the points the G3 arm fits came from |
+| RR Lyrae | 270,905 (confirmed, Clementini et al. 2023, A&A 674, A18) | Gaia DR3 table `gaiadr3.vari_rrlyrae`, joined to `gaia_source` for position and G. Archive reopens 2 Dec; until then check VizieR's Gaia DR3 copy (`I/358`) | from M_G = 0.32 [Fe/H] + 1.11 (Muraveva et al. 2018, MNRAS 481, 1195; check the coefficients in the paper) and the table's A_G. Use only stars with both [Fe/H] and A_G (A_G exists for 142,660 fundamental-mode stars) | old bulge and halo; the Clouds' and the Sagittarius stream's RR Lyrae land at their real distances |
+| APOGEE red giants | about 650,000 (check the file) | SDSS DR17 astroNN value-added catalogue, folder `https://data.sdss.org/sas/dr17/env/APOGEE_ASTRO_NN/` (confirmed). Find the file name and distance column in the data model `https://data.sdss.org/datamodel/files/APOGEE_ASTRONN` | spectroscopic, from a neural network trained on Gaia parallaxes; infrared, so it sees through much of the dust | bar, bulge and inner disc, past the galactic centre |
+
+**G-Beacons-a: `pipeline/build_beacons.py`**
+- One reader function per catalogue, each returning galactic x, y, z (via `prepare.galactic_to_xyz`), absolute G or a stand-in, colour and a `kind` code (1 Cepheid, 2 maser, 3 RR Lyrae, 4 APOGEE giant).
+- Drop entries without a distance or with a relative distance error above 30 %. Write how many were dropped, per kind, into `hierarchy.json`.
+- Output: one octree, `tiles/beacons/`, with `"survey": "beacons"`, built with `build_octree`. If the tile format has no room for `kind`, add a new format version; do not change STN1.
+- Tests with small synthetic tables in each catalogue's column layout: positions, the RR Lyrae distance formula, the error cut, a deterministic output.
+
+**G-Beacons-b: viewer**
+- Draw beacons as their own layer, on by default, with a tray toggle `beacons on / off`. They are few, so draw them all, at a minimum size of 2 px, without the brightness falloff normal stars get: they are markers, not light.
+- One colour per kind, from the existing palette: Cepheids white, masers orange only while hovered (orange is reserved for what the user changes), RR Lyrae and APOGEE at two of the five white opacities. Show a small legend in the tray while beacons are on.
+- Hover: kind, source paper, distance and its error.
+- `?beacons=cepheid,maser` limits the kinds, for checking the model by eye.
+
+**Gate Beacons (Human)**
+- From 38 kpc (`?focus=milky-way`), the beacons span the disc well beyond the Gaia bubble: Cepheids and masers should lie along the model's arms, and RR Lyrae and APOGEE giants should crowd the centre.
+- If the arms disagree with the beacons, the model is wrong, not the beacons. Report it; do not tune the model to match by hand.
+- `?bench=1`: draw time rises by no more than 1 ms.
+
+## 9. Not doing (and why)
 
 - **Filtering stars by distance uncertainty**: measured above, it would not remove the spokes.
 - **Pre-rendered parallax background shells**: wait until G3 shows whether the far field still needs them.

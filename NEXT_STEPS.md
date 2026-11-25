@@ -7,7 +7,7 @@ Brief for a coding agent (GitHub Copilot cloud agent or any other) working in th
 - Stop at each gate and report.
 - A human (the project owner, "Human") does everything marked **Human**: settings, secrets and all performance measurements.
 
-**Current checkpoint (24 Nov 2026): Steps 2–4 are implemented, except the node glow from Step 4c. Continue with [`NEXT_STEPS_GALAXY.md`](NEXT_STEPS_GALAXY.md), starting at G1; Step 5 below waits until G1–G3 are done.** Gate 2 hardware measurements remain open.
+**Current checkpoint (25 Nov 2026): Steps 2–4 and G1–G5 are implemented. Continue with Beacons in [`NEXT_STEPS_GALAXY.md`](NEXT_STEPS_GALAXY.md). Step 5 waits.**
 
 ## 1. Context
 
