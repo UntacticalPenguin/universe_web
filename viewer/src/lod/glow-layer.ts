@@ -18,33 +18,7 @@ export function createGlowLayer(tree: Hierarchy, scene: THREE.Scene) {
   const data = new THREE.InstancedBufferAttribute(new Float32Array(size * 3), 3).setUsage(THREE.DynamicDrawUsage)
   geometry.setAttribute("offsetPc", centers)
   geometry.setAttribute("properties", data)
-  const uniforms = { focal: { value: 1 }, lut: { value: createColourLut() } }
-  const material = new THREE.ShaderMaterial({
-    uniforms,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexShader: `
-      attribute vec3 offsetPc, properties;
-      uniform float focal;
-      uniform sampler2D lut;
-      varying vec2 coord;
-      varying vec3 intensity;
-      void main(){
-        vec3 view = mat3(viewMatrix)*offsetPc;
-        float depth = max(-view.z, 0.000001);
-        float sigma = max(2., focal*properties.x*0.5/depth);
-        coord = position.xy * 3.;
-        float flux = properties.y * ${fluxOf(4.83) * 100} / max(dot(view,view),1e-12);
-        vec3 rgb = texture2D(lut,vec2((clamp(log(properties.z/2000.)/log(25.),0.,1.)*255.+0.5)/256.,0.5)).rgb;
-        intensity = rgb / dot(rgb,vec3(${luminanceWeights.join(",")})) * flux / (6.2831853*sigma*sigma*(1.-exp(-4.5)));
-        view.xy += coord*sigma*depth/focal;
-        gl_Position = projectionMatrix*vec4(view,1.);
-      }`,
-    fragmentShader: `varying vec2 coord; varying vec3 intensity;
-      void main(){float r2=dot(coord,coord); if(r2>9.)discard; gl_FragColor=vec4(intensity*exp(-0.5*r2),1.);}`,
-  })
+  const { uniforms, material } = createGaussianMaterial()
   const mesh = new THREE.Mesh(geometry, material)
   mesh.frustumCulled = false
   scene.add(mesh)
@@ -68,4 +42,36 @@ export function createGlowLayer(tree: Hierarchy, scene: THREE.Scene) {
       count = 0
     },
   }
+}
+
+export function createGaussianMaterial() {
+  const uniforms = { focal: { value: 1 }, observer: { value: new THREE.Vector3() }, strength: { value: 1 }, lut: { value: createColourLut() } }
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      attribute vec3 offsetPc, properties;
+      uniform float focal, strength;
+      uniform vec3 observer;
+      uniform sampler2D lut;
+      varying vec2 coord;
+      varying vec3 intensity;
+      void main(){
+        vec3 view = mat3(viewMatrix)*(offsetPc-observer);
+        float depth = max(-view.z, 0.000001);
+        float sigma = max(2., focal*properties.x*0.5/depth);
+        coord = position.xy * 3.;
+        float flux = strength*properties.y * ${fluxOf(4.83) * 100} / max(dot(view,view),1e-12);
+        vec3 rgb = texture2D(lut,vec2((clamp(log(properties.z/2000.)/log(25.),0.,1.)*255.+0.5)/256.,0.5)).rgb;
+        intensity = rgb / dot(rgb,vec3(${luminanceWeights.join(",")})) * flux / (6.2831853*sigma*sigma*(1.-exp(-4.5)));
+        view.xy += coord*sigma*depth/focal;
+        gl_Position = projectionMatrix*vec4(view,1.);
+      }`,
+    fragmentShader: `varying vec2 coord; varying vec3 intensity;
+      void main(){float r2=dot(coord,coord); if(r2>9.)discard; gl_FragColor=vec4(intensity*exp(-0.5*r2),1.);}`,
+  })
+  return { material, uniforms }
 }
