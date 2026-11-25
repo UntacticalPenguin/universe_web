@@ -4,6 +4,8 @@ Brief for a coding agent, after `NEXT_STEPS.md` Steps 1–4. Read `AGENTS.md` fi
 
 **Status 25 Nov 2026:** G1–G3c and the code for G4 and G5 are merged. G5's data waits for the Human to set the repository variable `GAIA_CLOUD_TABLE` once DR4 is out (2 Dec). Until then the OGLE layer is off by default (`?ogle=1` shows it).
 
+**Synthetic stars (26 Nov, not by the agent):** `pipeline/build_synthetic.py` fills the galaxy beyond the Gaia bubble with about 9.8 M individual stars: positions from the G3 model, magnitude and colour copied from real Gaia stars brighter than M_G = −0.75, calibrated so their density matches Gaia's within 1 kpc and faded out inside 1–2.5 kpc of the Sun. Survey `synthetic`, on by default, `?synthetic=0` hides it, hover says "Synthetic star, not observed". Tests: `pipeline/tests/test_synthetic.py`.
+
 **Next for the agent: Beacons** (section 8). Steps 5 (sound, fan-out actions) in `NEXT_STEPS.md` wait until Beacons is done.
 
 ## 1. What the Human sees, and why (measured 24 Nov 2026)

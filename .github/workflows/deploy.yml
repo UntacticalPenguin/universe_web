@@ -106,6 +106,7 @@ jobs:
             if [ -f build_octree.py ]; then
               python build_octree.py data/raw/*.parquet --limit 6000000 --out ../viewer/public/tiles/stars
               python build_model.py --stars ../viewer/public/tiles/stars/hierarchy.json --out ../viewer/public/tiles/model
+              python build_synthetic.py data/raw/*.parquet --out ../viewer/public/tiles/synthetic
             fi
             {
               echo "## Star files"

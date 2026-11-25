@@ -35,7 +35,7 @@ const SETTLE_MS = 150
 const START_OFFSET = new THREE.Vector3(-1500, -2500, 1200)
 
 async function main() {
-  $<HTMLDetailsElement>("#settings").open = !window.matchMedia("(max-width: 640px)").matches
+  $<HTMLDetailsElement>("#settings").open = false
   const viewport = () => ({ width: window.innerWidth, height: window.innerHeight })
   const pixelRatio = Math.min(window.devicePixelRatio, 2)
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" })
@@ -250,6 +250,8 @@ async function main() {
     // OGLE-III only covers 116 rectangular fields, so it is opt-in (?ogle=1) until the Gaia Cloud samples exist.
     const ogle = params.get("ogle") === "1"
     const activeSurveys = new Set([luminous ? "luminous" : "stars", ...(clouds ? ["clouds/lmc", "clouds/smc"] : ogle ? ["lmc"] : [])])
+    // Synthetic stars fill the galaxy beyond the Gaia bubble (pipeline/build_synthetic.py); ?synthetic=0 hides them.
+    if (params.get("synthetic") !== "0") activeSurveys.add("synthetic")
     if (deeper && !luminous) {
       activeSurveys.add("deep")
       if (!precise) activeSurveys.add("deep-wide")
@@ -449,6 +451,8 @@ function describeStar(data: StarData, hit: StarHit, dust: boolean) {
     const distance = (offset: number) => (info.getFloat32(row + offset, true) / 1000).toFixed(2)
     return `<b>Gaia DR3 ${info.getBigUint64(row, true)}</b> · ${distance(12)} kpc from Sun · 16–84% interval ${distance(8)}–${distance(16)} kpc`
   }
+  if (hit.tileId?.startsWith("synthetic/"))
+    return `<b>Synthetic star</b>, not observed · position from the Milky Way model, brightness and colour copied from a real Gaia star · ${formatDistance(positionOf(data, hit.index).length())} from sun`
   if (hit.tileId?.startsWith("clouds/")) return `Gaia ${hit.tileId.split("/")[1].toUpperCase()} member candidate · Gaia G, BP−RP · model host-plane distance`
   if (hit.tileId?.startsWith("lmc/"))
     return `<b>OGLE-III LMC field</b> · V ≈ ${hit.apparentMag.toFixed(1)} from camera · colour: OGLE V − I · disc model, 49.59 kpc at the centre`

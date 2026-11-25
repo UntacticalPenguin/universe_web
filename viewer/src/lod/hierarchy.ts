@@ -21,7 +21,7 @@ export interface Hierarchy {
 export async function loadHierarchy(base: string): Promise<Hierarchy | null> {
   const tree: Hierarchy = { roots: [], nodes: {} }
   await Promise.all(
-    ["stars", "lmc", "clouds/lmc", "clouds/smc", "deep", "deep-wide", "luminous"].map(async (survey) => {
+    ["stars", "synthetic", "lmc", "clouds/lmc", "clouds/smc", "deep", "deep-wide", "luminous"].map(async (survey) => {
       const folder = base + "tiles/" + survey + "/"
       const response = await fetch(folder + "hierarchy.json")
       if (response.status === 404) return
