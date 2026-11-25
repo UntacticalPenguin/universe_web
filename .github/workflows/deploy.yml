@@ -191,6 +191,58 @@ jobs:
           python build_clouds.py --table "$GAIA_CLOUD_TABLE" --out "$RUNNER_TEMP/gaia-clouds"
           mv "$RUNNER_TEMP/gaia-clouds" ../viewer/public/tiles/clouds
 
+      - name: Cache cepheid beacon catalogue
+        uses: actions/cache@v4
+        with:
+          path: pipeline/data/beacons/cepheid.parquet
+          key: beacons-cepheid-v1-${{ hashFiles('pipeline/build_beacons.py') }}
+      - name: Prepare cepheid beacons
+        continue-on-error: true
+        timeout-minutes: 25
+        working-directory: pipeline
+        run: test -s data/beacons/cepheid.parquet || python build_beacons.py --cache data/beacons --fetch cepheid
+
+      - name: Cache maser beacon catalogue
+        uses: actions/cache@v4
+        with:
+          path: pipeline/data/beacons/maser.parquet
+          key: beacons-maser-v1-${{ hashFiles('pipeline/build_beacons.py') }}
+      - name: Prepare maser beacons
+        continue-on-error: true
+        timeout-minutes: 25
+        working-directory: pipeline
+        run: test -s data/beacons/maser.parquet || python build_beacons.py --cache data/beacons --fetch maser
+
+      - name: Cache rrlyrae beacon catalogue
+        uses: actions/cache@v4
+        with:
+          path: pipeline/data/beacons/rrlyrae.parquet
+          key: beacons-rrlyrae-v1-${{ hashFiles('pipeline/build_beacons.py') }}
+      - name: Prepare rrlyrae beacons
+        continue-on-error: true
+        timeout-minutes: 25
+        working-directory: pipeline
+        run: test -s data/beacons/rrlyrae.parquet || python build_beacons.py --cache data/beacons --fetch rrlyrae
+
+      - name: Cache apogee beacon catalogue
+        uses: actions/cache@v4
+        with:
+          path: pipeline/data/beacons/apogee.parquet
+          key: beacons-apogee-v1-${{ hashFiles('pipeline/build_beacons.py') }}
+      - name: Prepare apogee beacons
+        continue-on-error: true
+        timeout-minutes: 25
+        working-directory: pipeline
+        run: test -s data/beacons/apogee.parquet || python build_beacons.py --cache data/beacons --fetch apogee
+
+      - name: Build beacon octree from available catalogues
+        continue-on-error: true
+        working-directory: pipeline
+        run: |
+          python build_beacons.py --cache data/beacons --out "$RUNNER_TEMP/beacon-tiles"
+          mkdir -p ../viewer/public/tiles
+          mv "$RUNNER_TEMP/beacon-tiles" ../viewer/public/tiles/beacons
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20

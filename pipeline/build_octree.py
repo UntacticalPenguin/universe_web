@@ -11,10 +11,13 @@ import numpy as np
 import prepare
 
 
-def build_octree(out, xyz, mag, colour, astro=None, capacity=32768, details=None):
+def build_octree(out, xyz, mag, colour, astro=None, capacity=32768, details=None, *, detail_format="GDI1"):
     """Partition a float64 catalog using stable absolute-magnitude order and deterministic tile shuffles."""
     if capacity < 1 or not len(xyz):
         raise ValueError("a nonempty catalog and positive capacity are required")
+    if detail_format not in ("GDI1", "BCN1") or (detail_format == "BCN1" and details is None):
+        raise ValueError("invalid tile detail format")
+    tile_format = detail_format if details is not None else "STN1"
     rng = np.random.default_rng(42)
     missing = np.full(len(mag), np.nan)
     astro = astro or {}
@@ -46,7 +49,7 @@ def build_octree(out, xyz, mag, colour, astro=None, capacity=32768, details=None
         stored = rng.permutation(rows[:count])
         offsets = np.rint((xyz[stored] - center) * (32767 / half)).astype("<i2")
         with (folder / (name + ".bin")).open("wb") as tile:
-            tile.write(struct.pack("<4sIII", b"GDI1" if details is not None else b"STN1", 1, count, 0))
+            tile.write(struct.pack("<4sIII", tile_format.encode("ascii"), 1, count, 0))
             tile.write(offsets.tobytes())
             for field in fields:
                 tile.write(field[stored].tobytes())
@@ -76,7 +79,7 @@ def build_octree(out, xyz, mag, colour, astro=None, capacity=32768, details=None
     with tempfile.TemporaryDirectory(dir=out) as staging:
         folder = Path(staging)
         visit(folder, "r", np.zeros(3), half, np.argsort(mag, kind="stable"))
-        manifest = dict(version=1, format="GDI1" if details is not None else "STN1", root="r", capacity=capacity, nodes=nodes,
+        manifest = dict(version=1, format=tile_format, root="r", capacity=capacity, nodes=nodes,
                         absmagRange=[prepare.M_MIN, prepare.M_MAX], colourRange=[prepare.C_MIN, prepare.C_MAX],
                         teffLogRange=prepare.TEFF_LOG_RANGE, agRange=prepare.AG_RANGE, reddeningRange=prepare.EBR_RANGE)
         (folder / "hierarchy.json").write_text(json.dumps(manifest, allow_nan=False))
