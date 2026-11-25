@@ -112,10 +112,17 @@ def place_cloud_members(df: pd.DataFrame, dist: np.ndarray, src: np.ndarray, min
     poor = ~(df["parallax"].to_numpy(float) / df["parallax_error"].to_numpy(float) >= min_snr)
     l, b = np.radians(df["l"].to_numpy(float)), np.radians(df["b"].to_numpy(float))
     rng = np.random.default_rng(1935)
-    for l0, b0, radius, d0 in CLOUDS.values():
+    for name, (l0, b0, radius, d0) in CLOUDS.items():
         l0, b0 = np.radians(l0), np.radians(b0)
         cos_sep = np.sin(b) * np.sin(b0) + np.cos(b) * np.cos(b0) * np.cos(l - l0)
         member = poor & (cos_sep >= np.cos(np.radians(radius)))
+        if "pmra" in df and "pmdec" in df:
+            # Luri et al. 2021, Table 1, clean-sample equatorial means and dispersions.
+            # A diagonal approximation for bright slices; the full cone fit lives in build_clouds.
+            mx,my,sx,sy = ((1.7608,.3038,.4472,.6375) if name=="LMC" else
+                           (.7321,-1.2256,.3728,.2992))
+            score = ((df.pmra.to_numpy()-mx)/sx)**2+((df.pmdec.to_numpy()-my)/sy)**2
+            member &= score < 9.21
         dist[member] = d0 + rng.normal(0.0, CLOUD_DEPTH_PC, member.sum())
         src[member] = CLOUD_SOURCE
 

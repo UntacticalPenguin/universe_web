@@ -8,6 +8,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 from time import sleep
 from urllib.parse import urlencode
@@ -50,8 +51,25 @@ class SplitBatch(Exception):
     """The archive row limit or execution quota requires a smaller ID range."""
 
 
-def request_batch(start, end):
+def validate_batch(frame, start, end):
+    """Reject incomplete and overlapping batches for either transport."""
+    if len(frame)>=PAGE:
+        raise SplitBatch("row cap")
+    if not frame.source_id.between(start,end-1).all():
+        raise ValueError("source outside requested batch")
+    return frame
+
+
+def request_batch(start, end, archive=None):
     """Run an anonymous UWS job and retrieve its complete CSV."""
+    if archive is not None:
+        job = archive.launch_job_async(query(start,end))
+        try:
+            frame = job.get_results().to_pandas()
+            frame.columns = frame.columns.str.lower()
+            return validate_batch(frame,start,end)
+        finally:
+            archive.remove_jobs([job.jobid])
     params = dict(REQUEST="doQuery", LANG="ADQL", FORMAT="csv", MAXREC=PAGE, PHASE="RUN", QUERY=query(start,end))
     with urlopen(ENDPOINT, urlencode(params).encode(), timeout=90) as response:
         job = response.url.rstrip("/")
@@ -73,24 +91,20 @@ def request_batch(start, end):
         raise RuntimeError(f"Gaia job still pending: {job}")
     with urlopen(job+"/results/result",timeout=120) as response:
         frame=pd.read_csv(BytesIO(response.read()),dtype={"source_id":"int64"})
-    if len(frame)>=PAGE:
-        raise SplitBatch("row cap")
-    if not frame.source_id.between(start,end-1).all():
-        raise ValueError("source outside requested batch")
-    return frame
+    return validate_batch(frame,start,end)
 
 
-def fetch_range(bounds):
+def fetch_range(bounds, archive=None):
     """Split timed-out and capped jobs. Never publish a partial survey."""
     start,end=bounds
     for attempt in range(4):
         try:
-            return request_batch(start,end)
+            return request_batch(start,end,archive)
         except SplitBatch:
             if end-start < 2**44:
                 raise
             middle=(start+end)//2
-            return pd.concat([fetch_range((start,middle)),fetch_range((middle,end))],ignore_index=True)
+            return pd.concat([fetch_range((start,middle),archive),fetch_range((middle,end),archive)],ignore_index=True)
         except OSError as exc:
             if attempt==3: raise
             print(f"Retrying {start}..{end}: {exc}",flush=True)
@@ -129,9 +143,14 @@ if __name__=="__main__":
     args=parser.parse_args()
     width=2**57
     ranges=[(i*width,(i+1)*width) for i in range(48)]
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    archive = None
+    if os.getenv("GAIA_USER") and os.getenv("GAIA_PASSWORD"):
+        from astroquery.gaia import Gaia
+        Gaia.login(user=os.environ["GAIA_USER"],password=os.environ["GAIA_PASSWORD"])
+        archive = Gaia
+    with ThreadPoolExecutor(max_workers=1 if archive else 2) as pool:
         frames=[]
-        for index,frame in enumerate(pool.map(fetch_range,ranges)):
+        for index,frame in enumerate(pool.map(lambda bounds: fetch_range(bounds,archive),ranges)):
             frames.append(frame)
             print(f"Gaia sky batch {index+1}/48: {len(frame)} sources",flush=True)
     make_catalog(pd.concat(frames,ignore_index=True),args.out)
