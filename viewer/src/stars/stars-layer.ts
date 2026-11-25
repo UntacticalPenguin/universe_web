@@ -16,6 +16,7 @@ const vertexShader = /* glsl */ `
   uniform sampler2D uLut;
   uniform float uMagLimit;
   uniform float uExposure;
+  uniform float uWeight;
   uniform float uPixelRatio;
   #ifdef TILE
   uniform vec3 uOffset;
@@ -53,7 +54,7 @@ const vertexShader = /* glsl */ `
     float sizeCss = clamp(1.5 + 2.5 * log2(1.0 + flux * uExposure) * 0.30103, 1.5, uSpikes ? 48.0 : 16.0);
     gl_PointSize = sizeCss * uPixelRatio;
     vSpikeWidth = uSpikes && sizeCss >= 8.0 ? 1.0 / sizeCss : 0.0;
-    vIntensity = flux / (${profileArea} * gl_PointSize * gl_PointSize);
+    vIntensity = uWeight * flux / (${profileArea} * gl_PointSize * gl_PointSize);
   }
 `
 
@@ -98,6 +99,7 @@ export function createStarsLayer(data: StarData, pixelRatio: number, tile?: { of
     uLut: { value: lut },
     uMagLimit: { value: Infinity },
     uExposure: { value: 1 },
+    uWeight: { value: 1 },
     uPixelRatio: { value: pixelRatio },
   }
   const material = new THREE.ShaderMaterial({
@@ -120,6 +122,7 @@ export function createStarsLayer(data: StarData, pixelRatio: number, tile?: { of
       geometry.dispose()
       material.dispose()
     },
+    setWeight: (weight: number) => (uniforms.uWeight.value = weight),
     setDust: (enabled: boolean) => (uniforms.uDust.value = enabled),
     setSpikes: (enabled: boolean) => (uniforms.uSpikes.value = enabled),
     setMagLimit: (magnitude: number) => (uniforms.uMagLimit.value = magnitude),

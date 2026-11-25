@@ -345,8 +345,10 @@ async function main() {
       if (automatic) baseExposure = updateExposure(baseExposure, desiredExposure, seconds)
       drawnExposure = baseExposure * 2 ** exposureSelector.value()
       stars?.setExposure(drawnExposure)
+      let fading = false
       if (stream) {
         const state = stream.update()
+        fading = state.fading
         tileStatus.textContent = `Octree · ${state.nodes} tiles · ${state.points.toLocaleString("en-US")} points · ${state.pending} loading`
       }
       renderer.setRenderTarget(hdr)
@@ -368,7 +370,7 @@ async function main() {
         drawTimes.push(performance.now() - startedAt)
         if (drawTimes.length > BENCH_WINDOW) drawTimes.shift()
       }
-      isDirty = automatic && (needsMeter || Math.abs(desiredExposure - baseExposure) > 0.01 * baseExposure)
+      isDirty = fading || (automatic && (needsMeter || Math.abs(desiredExposure - baseExposure) > 0.01 * baseExposure))
       framesThisSecond++
       visible = undefined
       placeTargetMark(targetPosition, targetName, window.innerWidth, window.innerHeight)
