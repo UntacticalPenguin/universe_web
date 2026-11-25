@@ -46,3 +46,13 @@ def test_cloud_motion_and_distance():
         keep=membership(stars,name)
         assert not keep[0] and not keep[1] and keep.sum()>180
         assert np.isclose(distances(name,ra,dec),build_lmc.disc_distance(ra,dec) if name=="lmc" else 62800)
+
+
+def test_motion_filter_preserves_nonmembers():
+    lon,lat=prepare.CLOUDS["LMC"][:2]
+    df=pd.DataFrame(dict(l=[lon]*2,b=[lat]*2,parallax=[.01]*2,parallax_error=[.02]*2,
+                         pmra=[1.7608,8.],pmdec=[.3038,.3038]))
+    d,src=np.full(2,8000.),np.ones(2,dtype=int)
+    prepare.place_cloud_members(df,d,src,5.)
+    assert src.tolist()==[prepare.CLOUD_SOURCE,1]
+    assert d[1]==8000.
