@@ -68,6 +68,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Download a magnitude slice of Gaia DR3 with distances.")
     ap.add_argument("--gmin", type=float, default=-5.0, help="faint end is exclusive; bright end inclusive")
     ap.add_argument("--gmax", type=float, required=True)
+    ap.add_argument("--proper-motions", action="store_true", help="include PM columns when building a new raw release")
     ap.add_argument("--login", action="store_true", help="prompt for your ESA Gaia archive login first")
     ap.add_argument("--out", type=Path, default=Path("data/raw"))
     ap.add_argument("--count", action="store_true", help="only print the number of rows in this slice")
@@ -103,6 +104,8 @@ def main() -> None:
         return
 
     query = QUERY.format(gmin=args.gmin, gmax=args.gmax)
+    if args.proper_motions:
+        query = query.replace("g.source_id,", "g.source_id, g.pmra, g.pmdec,")
     print("Submitting query:\n" + query)
     job = Gaia.launch_job_async(query)
     table = job.get_results()

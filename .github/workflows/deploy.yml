@@ -121,12 +121,13 @@ jobs:
         with:
           path: viewer/public/tiles/lmc
           key: ogle-lmc-6m-${{ hashFiles('pipeline/build_lmc.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
+          restore-keys: ogle-lmc-6m-91e8b6002abf9c3d4129285bce3c44c59488c6ff400da30c15d6791d6d7f15c8
       - name: Build six million OGLE-III LMC-field entries
         # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
         continue-on-error: true
         if: steps.ogle-cache.outputs.cache-hit != 'true'
         working-directory: pipeline
-        run: python build_lmc.py --out ../viewer/public/tiles/lmc
+        run: test -s ../viewer/public/tiles/lmc/hierarchy.json || python build_lmc.py --out ../viewer/public/tiles/lmc
 
       - name: Restore deeper Gaia preview
         id: deep-cache
@@ -136,12 +137,13 @@ jobs:
             viewer/public/tiles/deep
             viewer/public/tiles/deep-wide
           key: deep-gaia-v1-${{ hashFiles('pipeline/build_deep_gaia.py', 'pipeline/build_octree.py', 'pipeline/prepare.py') }}
+          restore-keys: deep-gaia-v1-07a2ed58d11c80b666509827b88148b20411477f8cafcb7099a630291866c8d0
       - name: Build deeper Gaia preview
         # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
         continue-on-error: true
         if: steps.deep-cache.outputs.cache-hit != 'true'
         working-directory: pipeline
-        run: python build_deep_gaia.py --out ../viewer/public/tiles
+        run: test -s ../viewer/public/tiles/deep/hierarchy.json && test -s ../viewer/public/tiles/deep-wide/hierarchy.json || python build_deep_gaia.py --out ../viewer/public/tiles
 
       - name: Restore full-sky luminous Gaia selection
         id: luminous-cache
@@ -152,6 +154,9 @@ jobs:
           # Fall back to the last good selection when the archive is down (closed 25 Nov - 2 Dec 2026).
           restore-keys: luminous-gaia-v1-
       - name: Select luminous Gaia sources across the full distance catalog
+        env:
+          GAIA_USER: ${{ secrets.GAIA_USER }}
+          GAIA_PASSWORD: ${{ secrets.GAIA_PASSWORD }}
         # External archive: if it is down, deploy without this layer; the viewer hides missing layers.
         continue-on-error: true
         if: steps.luminous-cache.outputs.cache-hit != 'true'
