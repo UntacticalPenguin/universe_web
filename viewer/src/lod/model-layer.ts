@@ -10,7 +10,7 @@ export async function loadModel(base: string, scene: THREE.Scene, options: Omit<
   if (!manifest.ok) throw Error("Model manifest HTTP " + manifest.status)
   const meta = await manifest.json()
   if (meta.format !== "MWM1" || meta.version !== 1) throw Error("Unsupported Milky Way model")
-  const { uniforms, material } = createGaussianMaterial()
+  const { uniforms, material } = createGaussianMaterial(true)
   const quad = new THREE.PlaneGeometry(2, 2)
   const group = new THREE.Group()
   group.visible = false
@@ -56,7 +56,8 @@ export async function loadModel(base: string, scene: THREE.Scene, options: Omit<
   scene.add(group)
   changed()
   return {
-    update(enabled: boolean, height: number) {
+    update(enabled: boolean, height: number, dustScreen: boolean) {
+      uniforms.dustScreen.value = dustScreen
       uniforms.strength.value = enabled ? THREE.MathUtils.smoothstep(options.camera.position.length(), 2000, 8000) : 0
       group.visible = uniforms.strength.value > 0
       uniforms.observer.value.copy(options.camera.position)

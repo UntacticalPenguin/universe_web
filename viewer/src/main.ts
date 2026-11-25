@@ -316,6 +316,14 @@ async function main() {
     refreshCatalog()
   }
   $("#home").onclick = () => focus(catalog[0], false)
+  let modelDust = false
+  const dustModelButton = $("#model-dust")
+  dustModelButton.onclick = () => {
+    modelDust = !modelDust
+    dustModelButton.setAttribute("aria-pressed", String(modelDust))
+    dustModelButton.textContent = modelDust ? "On" : "Off"
+    invalidate()
+  }
   const modelButton = $("#model-toggle")
   modelButton.onclick = () => {
     modelEnabled = !modelEnabled
@@ -328,6 +336,7 @@ async function main() {
       .then((layer) => {
         model = layer
         $("#model-row").hidden = !layer
+        $("#model-dust-row").hidden = !layer
         invalidate()
       })
       .catch((error) => console.warn("Milky Way model unavailable", error))
@@ -371,7 +380,7 @@ async function main() {
         fading = state.fading
         tileStatus.textContent = `Octree · ${state.nodes} tiles · ${state.points.toLocaleString("en-US")} points · ${state.pending} loading`
       }
-      $("#model-status").hidden = !model?.update(modelEnabled, canvas.height)
+      $("#model-status").hidden = !model?.update(modelEnabled, canvas.height, modelDust)
       renderer.setRenderTarget(hdr)
       renderer.render(scene, camera)
       if (automatic && drawNumber - lastMeterDraw >= 4) {
