@@ -21,8 +21,10 @@ def test_readers_and_tiles(tmp_path):
     coord = SkyCoord(180*u.deg,-30*u.deg).galactic.cartesian.xyz.value
     np.testing.assert_allclose(mas.loc[0,["x","y","z"]],2000*coord)
     assert mas.error[0]==400
-    rr = read_rrlyrae(pd.DataFrame(dict(lon=[90]*4,lat=[0]*4,g=[12.79]*4,ag=[2,2,np.nan,2],
-          feh=[-1.,np.nan,-1.,-1.],e_feh=[.1]*4,e_ag=[.05,.05,.05,2],e_g=[.01]*4,colour=[.5]*4)))
+    rr = read_rrlyrae(pd.DataFrame({"RAdeg":[180]*4, "DEdeg":[-30]*4, "Gmagavg":[12.79]*4,
+          "AG":[2,2,np.nan,2], "[M/H]":[-1.,np.nan,-1.,-1.], "e_[M/H]":[.1]*4,
+          "e_AG":[.05,.05,.05,2], "e_Gmagavg":[.01]*4, "BPmagavg":[13]*4, "RPmagavg":[12.5]*4}))
+    np.testing.assert_allclose(rr.loc[0,["x","y","z"]],1000*coord)
     # M_G=.79 and dereddened g=10.79 give distance modulus 10.
     assert np.isclose(rr.distance[0],1000) and np.isclose(rr.mag[0],.79)
     expected_sigma=np.sqrt(.01**2+.05**2+.032**2+.04**2+.06**2+.17**2)

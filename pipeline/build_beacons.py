@@ -45,7 +45,9 @@ def read_masers(t):
 
 
 def read_rrlyrae(t):
-    """VizieR I/358/vrrlyr joined to I/355/gaiadr3; aliases used in RR_QUERY."""
+    """Gaia I/358/vrrlyr photometry, Fourier metallicity, extinction and source position."""
+    t = t.rename(columns={key: value[0] for key, value in RR_COLUMNS.items()})
+    gal = SkyCoord(t.ra.to_numpy()*u.deg, t.dec.to_numpy()*u.deg).galactic
     absolute = .32*t.feh + 1.11
     modulus = t.g - t.ag - absolute
     distance = 10**(1 + modulus/5)
@@ -54,7 +56,7 @@ def read_rrlyrae(t):
     sigma = np.sqrt(t.e_g**2+t.e_ag**2+(.32*t.e_feh)**2+(.04*t.feh)**2+.06**2+.17**2)
     error = distance*np.log(10)/5*sigma
     error = error.where((t.e_g >= 0) & (t.e_ag >= 0) & (t.e_feh >= 0))
-    return beacon_rows(t.lon, t.lat, distance, error, 3, absolute, t.colour.fillna(SUN_BPRP))
+    return beacon_rows(gal.l.deg, gal.b.deg, distance, error, 3, absolute, (t.bp-t.rp).fillna(SUN_BPRP))
 
 
 def read_apogee(t):
@@ -69,13 +71,36 @@ def read_apogee(t):
 
 READERS = dict(cepheid=read_cepheids, maser=read_masers, rrlyrae=read_rrlyrae, apogee=read_apogee)
 
-RR_QUERY = """
-SELECT r.Source AS source_id, g.GLON AS lon, g.GLAT AS lat,
-r.Gmagavg AS g, r.e_Gmagavg AS e_g, r.AG AS ag, r.e_AG AS e_ag,
-r."[M/H]" AS feh, r."e_[M/H]" AS e_feh, g."BP-RP" AS colour
-FROM "I/358/vrrlyr" AS r
-LEFT OUTER JOIN "I/355/gaiadr3" AS g ON g.Source=r.Source
-"""
+# From the CDS ReadMe for I/358/vrrlyr.dat. The distribution already
+# includes Gaia source positions in its last two fields, so no TAP join is needed.
+RR_COLUMNS = {
+    "Source": ("source_id", 1, 19), "Gmagavg": ("g", 240, 249),
+    "e_Gmagavg": ("e_g", 251, 263), "BPmagavg": ("bp", 265, 275),
+    "RPmagavg": ("rp", 292, 302), "[M/H]": ("feh", 473, 485),
+    "e_[M/H]": ("e_feh", 487, 497), "AG": ("ag", 807, 820),
+    "e_AG": ("e_ag", 822, 836), "RAdeg": ("ra", 838, 859),
+    "DEdeg": ("dec", 861, 882),
+}
+
+
+def rr_table():
+    """Read the complete CDS distribution, falling back to its VizieR table service."""
+    from urllib.request import urlretrieve
+    from astroquery.vizier import Vizier
+    with TemporaryDirectory() as tmp:
+        path = Path(tmp)/"vrrlyr.dat.gz"
+        try:
+            urlretrieve("https://vizier.cfa.harvard.edu/ftp/cats/I/358/vrrlyr.dat.gz", path)
+            frame = pd.read_fwf(path, names=list(RR_COLUMNS),
+                                colspecs=[(lo-1,hi) for _,lo,hi in RR_COLUMNS.values()])
+        except (OSError, EOFError) as error:
+            print(f"Retrying RR Lyrae via VizieR: {error}", flush=True)
+            client = Vizier(columns=list(RR_COLUMNS), row_limit=-1, timeout=300,
+                            vizier_server="vizier.cfa.harvard.edu")
+            frame = client.get_catalogs("I/358/vrrlyr")[0].to_pandas()
+    if len(frame) != 271779 or frame.Source.isna().any() or not frame.Source.is_unique:
+        raise ValueError("Incomplete or duplicated I/358/vrrlyr rows")
+    return frame.sort_values("Source", kind="stable")
 
 
 def download(name):
@@ -94,16 +119,7 @@ def download(name):
                 return pd.DataFrame({k: np.array(rows[k], dtype=float) for k in
                                      ["RA", "DEC", "LOGG", "DIST", "DIST_ERROR"]})
     if name == "rrlyrae":
-        from pyvo.dal import TAPService
-        tap = TAPService("https://tapvizier.cds.unistra.fr/TAPVizieR/tap")
-        result = tap.run_async(RR_QUERY, maxrec=500000, timeout=900)
-        if result.status[0].upper() != "OK":
-            raise ValueError(f"Incomplete VizieR result: {result.status}")
-        frame = result.to_table().to_pandas()
-        frame.columns = frame.columns.str.lower()
-        if len(frame) != 271779 or not frame.source_id.is_unique:
-            raise ValueError("Incomplete or duplicated I/358/vrrlyr rows")
-        return frame.sort_values("source_id", kind="stable")
+        return rr_table()
 
     from astroquery.vizier import Vizier
     table, columns, count = (
